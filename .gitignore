@@ -36,3 +36,10 @@ yarn.lock
 
 # Deprecated folders
 .deprecated/
+
+# Internal docs (not for public release)
+docs/specs/
+specs/
+
+# Package internal
+packages/*/dist/
