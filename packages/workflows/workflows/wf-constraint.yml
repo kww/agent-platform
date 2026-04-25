@@ -44,7 +44,7 @@ openclaw:
   emoji: "🔍"
   keywords: [约束, 检查, 铁律, Long-Running, feature_list, progress]
   examples:
-    - input: "/wf-constraint /root/projects/my-app"
+    - input: "/wf-constraint ~/my-app"
       output: "检查 feature_list、功能拆解、progress"
     - input: "/wf-constraint . --level iron_law"
       output: "严格检查，违反时停止"

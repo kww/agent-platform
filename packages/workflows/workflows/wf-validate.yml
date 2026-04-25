@@ -41,7 +41,7 @@ openclaw:
   emoji: "✅"
   keywords: [验证, 检查, 完整性, 一致性, 项目状态]
   examples:
-    - input: "/wf-validate /root/projects/my-app"
+    - input: "/wf-validate ~/my-app"
       output: "验证项目结构、Git 状态、依赖"
     - input: "/wf-validate . --type workflow"
       output: "验证工作流项目自身"
@@ -303,4 +303,3 @@ metadata:
     - validation
     - quality
     - ci
-  documentation: /root/knowledge-base/projects/agent-studio/validation-workflow.md

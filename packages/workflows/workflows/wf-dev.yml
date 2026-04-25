@@ -54,15 +54,15 @@ openclaw:
   emoji: "🚀"
   keywords: [开发, 任务, 执行, 迭代, backlog, feature]
   examples:
-    - input: "/wf-dev /root/projects/my-app --feature_id FEAT-001"
+    - input: "/wf-dev ~/my-app --feature_id FEAT-001"
       output: "backlog 模式：从 backlog 读取 FEAT-001"
-    - input: "/wf-dev /root/projects/my-app --requirement '添加登录'"
+    - input: "/wf-dev ~/my-app --requirement '添加登录'"
       output: "iterate 模式：分析代码 → 生成任务"
-    - input: "/wf-dev /root/projects/my-app"
+    - input: "/wf-dev ~/my-app"
       output: "execute 模式：执行 tasks.yml"
-    - input: "/wf-dev /root/projects/my-app --batch-strategy priority_first --batch-preset urgent_critical"
+    - input: "/wf-dev ~/my-app --batch-strategy priority_first --batch-preset urgent_critical"
       output: "紧急模式：高优先级任务优先执行"
-    - input: "/wf-dev /root/projects/my-app --batch-strategy fast_first --batch-preset mvp_fast"
+    - input: "/wf-dev ~/my-app --batch-strategy fast_first --batch-preset mvp_fast"
       output: "MVP 模式：短时间任务优先，快速产出"
 
 # 输入参数

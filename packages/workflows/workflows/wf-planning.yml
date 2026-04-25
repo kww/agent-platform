@@ -693,4 +693,3 @@ metadata:
       changes:
         - 初始版本
         - 支持 tasks.yml 和 feature_list.json 两种输出格式
-  documentation: /root/knowledge-base/projects/agent-studio/planning-workflow.md

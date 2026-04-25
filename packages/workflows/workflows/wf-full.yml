@@ -818,7 +818,6 @@ metadata:
     - anthropic-mode
     - long-running
     - backlog-integration
-  documentation: /root/knowledge-base/projects/agent-studio/full-workflow.md
   changelog:
     - version: 4.0.0
       date: 2026-04-08

@@ -62,7 +62,7 @@ openclaw:
   emoji: "🔄"
   keywords: [继续, 自动, 智能选择, backlog, 下一步]
   examples:
-    - input: "/wf-continue /root/projects/my-app"
+    - input: "/wf-continue ~/my-app"
       output: "从 backlog 选择最紧急待办，自动调用对应工作流"
 
 # 输入参数
@@ -308,7 +308,6 @@ metadata:
     - backlog
     - intelligent
     - continue
-  documentation: /root/knowledge-base/projects/agent-workflows/wf-continue.md
   changelog:
     - version: 1.0.0
       date: 2026-04-06

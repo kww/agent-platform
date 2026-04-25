@@ -52,11 +52,11 @@ openclaw:
   emoji: "🐛"
   keywords: [bug, 修复, 错误, 异常, fix]
   examples:
-    - input: "/wf-bugfix /root/projects/my-app BUG-001"
+    - input: "/wf-bugfix ~/my-app BUG-001"
       output: "从 backlog 读取 BUG-001，修复后标记解决"
-    - input: "/wf-bugfix /root/projects/my-app"
+    - input: "/wf-bugfix ~/my-app"
       output: "自动选择最紧急 Bug，修复后标记解决"
-    - input: "/wf-bugfix /root/projects/my-app --bug_description '登录报错'"
+    - input: "/wf-bugfix ~/my-app --bug_description '登录报错'"
       output: "直接修复描述的 Bug"
 
 # 输入参数

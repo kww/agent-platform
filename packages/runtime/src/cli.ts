@@ -467,28 +467,28 @@ program.parse();
  * 
  * # 列出工作流
  * agent-runtime list workflows
- * 
+ *
  * # 执行工作流（JSON 参数）
- * agent-runtime run wf-dev --input '{"project_path": "/root/projects/myapp"}'
- * 
+ * agent-runtime run wf-dev --input '{"project_path": "~/myapp"}'
+ *
  * # 执行工作流（key=value 参数）
- * agent-runtime run wf-dev --input project_path=/root/projects/myapp --input requirement="实现登录"
- * 
+ * agent-runtime run wf-dev --input project_path=~/myapp --input requirement="实现登录"
+ *
  * # 执行工作流（简写参数）
- * agent-runtime run wf-dev --project /root/projects/myapp --requirement "实现登录"
- * 
+ * agent-runtime run wf-dev --project ~/myapp --requirement "实现登录"
+ *
  * # 执行工作流（环境变量）
- * PROJECT=/root/projects/myapp REQUIREMENT="实现登录" agent-runtime run wf-dev
- * 
+ * PROJECT=~/myapp REQUIREMENT="实现登录" agent-runtime run wf-dev
+ *
  * # 执行工作流（backlog 模式）
- * agent-runtime run wf-dev --project /root/projects/myapp --feature FE-001
- * 
+ * agent-runtime run wf-dev --project ~/myapp --feature FE-001
+ *
  * # 调试参数解析（不执行）
- * agent-runtime run wf-dev --project /root/projects/myapp --dry-run
- * 
+ * agent-runtime run wf-dev --project ~/myapp --dry-run
+ *
  * # 查询执行状态
  * agent-runtime status exec-xxx
- * 
+ *
  * # 启动 HTTP API
  * agent-runtime server --port 3001
  */
