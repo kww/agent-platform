@@ -41,5 +41,28 @@ yarn.lock
 docs/specs/
 specs/
 
+# Internal dev scripts
+scripts/
+
 # Package internal
 packages/*/dist/
+
+# Runtime working directory
+packages/runtime/.agent-runtime/
+
+# Test outputs and temporary files
+packages/runtime/parallel-*.txt
+packages/runtime/tests/
+packages/runtime/src/__tests__/
+packages/workflows/tests/
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Example files (keep in src but not track)
+*.example
+
+# Web UI (internal development tool)
+packages/runtime/web-ui/
