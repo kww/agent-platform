@@ -1,0 +1,109 @@
+# wf-dev/entry.yml - 工作流入口步骤
+# ============================================================================
+# 用途：判断执行模式，统一入口
+# 调用：wf-dev.yml 主工作流
+# ============================================================================
+
+id: wf-dev/entry
+name: 判断执行模式
+stage: plan
+description: |
+  统一入口步骤，判断执行模式：
+  - feature_id → backlog 模式
+  - requirement → iterate 模式
+  - tasks.yml → execute 模式
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  feature_id:
+    type: string
+    description: Feature ID（可选）
+    required: false
+  
+  requirement:
+    type: string
+    description: 需求描述（可选）
+    required: false
+  
+  mode:
+    type: string
+    description: 手动指定模式
+    required: false
+    default: auto
+
+# 输出
+outputs:
+  - name: determined_mode
+    type: string
+    description: 判断出的模式（backlog/iterate/execute）
+  
+  - name: has_feature_id
+    type: boolean
+    description: 是否有 feature_id
+  
+  - name: feature_id
+    type: string
+    description: feature_id（如果有）
+
+# 执行逻辑
+execute:
+  type: script
+  script: |
+    #!/bin/bash
+    set -e
+    
+    PROJECT_PATH="${inputs.project_path}"
+    FEATURE_ID="${inputs.feature_id}"
+    REQUIREMENT="${inputs.requirement}"
+    MODE="${inputs.mode}"
+    
+    echo "🔍 判断执行模式..."
+    echo ""
+    
+    # 如果手动指定模式
+    if [ "$MODE" != "auto" ]; then
+      echo "📋 手动指定模式: $MODE"
+      echo "determined_mode=$MODE"
+      echo "has_feature_id=$([ -n "$FEATURE_ID" ] && echo 'true' || echo 'false')"
+      echo "feature_id=$FEATURE_ID"
+      exit 0
+    fi
+    
+    # 自动判断（优先级：feature_id > requirement > tasks.yml）
+    if [ -n "$FEATURE_ID" ]; then
+      echo "📋 Backlog 模式：feature_id=$FEATURE_ID"
+      echo "determined_mode=backlog"
+      echo "has_feature_id=true"
+      echo "feature_id=$FEATURE_ID"
+    elif [ -n "$REQUIREMENT" ]; then
+      echo "🔄 Iterate 模式：有需求描述"
+      echo "determined_mode=iterate"
+      echo "has_feature_id=false"
+      echo "feature_id="
+    elif [ -f "$PROJECT_PATH/tasks.yml" ]; then
+      echo "⚙️ Execute 模式：有 tasks.yml"
+      echo "determined_mode=execute"
+      echo "has_feature_id=false"
+      echo "feature_id="
+    else
+      echo "❌ 无法判断模式"
+      echo ""
+      echo "请提供以下之一："
+      echo "  --feature_id FEAT-001   # 从 backlog 读取"
+      echo "  --requirement '需求'    # 分析生成任务"
+      echo "  或确保存在 tasks.yml    # 执行任务清单"
+      exit 1
+    fi
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, entry, mode-detection]

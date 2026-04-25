@@ -1,0 +1,118 @@
+# wf-dev/core-summary.yml - 共享核心：汇总阶段
+# ============================================================================
+# 用途：生成完成报告，所有模式共享
+# 输入：执行结果、验证结果
+# 输出：完成报告
+# ============================================================================
+
+id: wf-dev/core-summary
+name: 汇总阶段
+description: |
+  汇总阶段核心逻辑：
+  - 生成完成报告
+  - 更新进度文件
+  - 发送通知
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  mode:
+    type: string
+    description: 执行模式
+    required: true
+  
+  feature_id:
+    type: string
+    description: Feature ID（可选）
+    required: false
+  
+  execution_results:
+    type: object
+    description: 执行结果
+    required: false
+  
+  test_result:
+    type: object
+    description: 测试结果
+    required: false
+  
+  review_result:
+    type: object
+    description: 审查结果
+    required: false
+
+# 输出
+outputs:
+  - name: completion_report
+    type: file
+    description: 完成报告路径
+  
+  - name: summary
+    type: object
+    description: 汇总信息
+
+# 步骤流程
+steps:
+  # 1. 更新 progress.json
+  - id: update-progress
+    condition: "test -f ${inputs.project_path}/progress.json"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        
+        if [ -f "$PROJECT_PATH/progress.json" ]; then
+          jq --arg time "$CURRENT_TIME" \
+             --arg mode "${inputs.mode}" \
+             --arg feature_id "${inputs.feature_id:-}" \
+             '.last_updated = $time | .execution_mode = $mode | .last_feature_id = $feature_id' \
+             "$PROJECT_PATH/progress.json" > "$PROJECT_PATH/progress.json.tmp"
+          
+          mv "$PROJECT_PATH/progress.json.tmp" "$PROJECT_PATH/progress.json"
+          echo "✅ progress.json 已更新"
+        fi
+  
+  # 2. 生成完成报告
+  - id: generate-report
+    execute:
+      type: builtin
+      handler: generate-completion-report
+    input:
+      project_path: "${inputs.project_path}"
+      mode: "${inputs.mode}"
+      feature_id: "${inputs.feature_id}"
+      execution_results: "${inputs.execution_results}"
+      test_result: "${inputs.test_result}"
+      review_result: "${inputs.review_result}"
+    output:
+      completion_report
+  
+  # 3. 发送通知
+  - id: notify-complete
+    tool: notification/notify
+    input:
+      channel: discord
+      message: |
+        🎉 wf-dev 完成
+        
+        模式: ${inputs.mode}
+        ${inputs.feature_id != '' ? '📋 Feature: ' + inputs.feature_id : ''}
+        
+        📊 结果：
+        - 执行: ✅
+        - 测试: ${inputs.test_result.passed == true ? '✅' : '❌'}
+        - Review: ${inputs.review_result.passed == true ? '✅' : '❌'}
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, core, summary, report]

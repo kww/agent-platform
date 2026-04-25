@@ -1,0 +1,62 @@
+# wf-patch - L0 极简工作流
+#
+# 用途：单文件、配置、文案修改
+# 特点：无验证、极快执行
+#
+# 调用方式：
+#   POST /api/execute
+#   {
+#     "workflowId": "wf-patch",
+#     "inputs": {
+#       "project_path": "/path/to/project",
+#       "description": "修改 README 中的拼写错误"
+#     }
+#   }
+
+id: wf-patch
+stage: fix
+name: Patch
+description: L0 极简工作流 - 配置/文案修改，无验证
+category: development
+emoji: "🔧"
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 修改配置文件
+  - 修改文案/文档
+  - 单文件小改动
+  - 拼写错误修复
+  
+  ⚠️ **不适合**：
+  - 代码逻辑修改 → 用 wf-bugfix
+  - 新功能开发 → 用 wf-quick
+
+steps:
+  # Step 1: 执行修改
+  - id: execute-patch
+    step: patch/execute
+    input:
+      project_path: "{{project_path}}"
+      description: "{{description}}"
+    output: result
+
+  # Step 2: Git 提交（使用 builtin handler）
+  - id: commit
+    execute:
+      type: builtin
+      handler: git-commit
+    input:
+      message: "patch: {{description}}"
+    output: commit_result
+
+# 执行配置
+config:
+  # 极简模式：无 Iron Laws 检查
+  ironLaws: false
+  # 无测试验证
+  skipTests: true
+  # 默认 Agent
+  defaultAgent: codex
+  # 超时设置（较短）
+  timeout: 120000  # 2 分钟

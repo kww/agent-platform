@@ -1,0 +1,47 @@
+# test-split-batch.yml - 测试任务分批
+id: test-split-batch
+stage: develop
+name: 测试任务分批
+description: 测试 split-batch 步骤
+version: 1.0.0
+
+inputs:
+  - name: project_path
+    type: string
+    default: /root/projects/outputs/split-batch-test
+
+steps:
+  - id: load-tasks
+    step: planning/load-tasks
+    input:
+      project_path: "${inputs.project_path}"
+    output: tasks_data
+  
+  - id: split-balanced
+    step: planning/split-batch
+    input:
+      tasks: "${steps.load-tasks.tasks_data.tasks}"
+      batch_size: 2
+      strategy: balanced
+    output: balanced
+  
+  - id: split-sequential
+    step: planning/split-batch
+    input:
+      tasks: "${steps.load-tasks.tasks_data.tasks}"
+      batch_size: 2
+      strategy: sequential
+    output: sequential
+  
+  - id: split-parallel
+    step: planning/split-batch
+    input:
+      tasks: "${steps.load-tasks.tasks_data.tasks}"
+      batch_size: 2
+      strategy: parallel
+    output: parallel
+
+outputs:
+  - balanced
+  - sequential
+  - parallel

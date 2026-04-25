@@ -1,0 +1,306 @@
+# wf-validate.yml - 通用项目验证工作流
+# ============================================================================
+# 工作流类型: 验证
+# 触发方式: /wf-validate <project_path> [--type workflow|project]
+# 用途: 验证项目完整性、一致性、就绪状态
+# ============================================================================
+
+id: wf-validate
+stage: develop
+name: 项目验证工作流
+description: |
+  通用项目验证工作流，支持两种模式：
+  
+  **workflow 模式**：验证工作流项目自身
+  - Handler 注册完整性
+  - README 统计一致性
+  - YAML 语法正确性
+  
+  **project 模式**：验证用户项目是否准备好使用工作流
+  - 项目结构完整性
+  - Git 状态检查
+  - 依赖安装检查
+  - tasks.yml 规范（如果存在）
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 提交前验证（workflow 模式）
+  - 开始开发前检查项目状态（project 模式）
+  - CI/CD 流水线第一步
+  - 定期健康检查
+  
+  ⚠️ **不适合**：
+  - 代码审查 → 用 wf-review
+  - 单元测试 → 用 wf-test
+  - E2E 测试 → 用 wf-e2e-test
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "✅"
+  keywords: [验证, 检查, 完整性, 一致性, 项目状态]
+  examples:
+    - input: "/wf-validate /root/projects/my-app"
+      output: "验证项目结构、Git 状态、依赖"
+    - input: "/wf-validate . --type workflow"
+      output: "验证工作流项目自身"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: type
+    type: string
+    required: false
+    default: project
+    enum: [workflow, project]
+    description: |
+      验证类型：
+      - workflow: 验证工作流项目自身（Handler、README、YAML）
+      - project: 验证用户项目是否准备好使用工作流
+  
+  - name: quick
+    type: boolean
+    required: false
+    default: false
+    description: 快速模式（只检查关键项）
+  
+  - name: checks
+    type: array
+    required: false
+    description: |
+      要执行的检查项（不指定则使用默认）：
+      - workflow 模式: [handlers, readme-stats, yaml-syntax]
+      - project 模式: [structure, git, dependencies, tasks-yml]
+
+# 阶段定义
+phases:
+  - id: validation
+    name: 验证阶段
+    parallel: false
+  - id: summary
+    name: 汇总阶段
+    parallel: false
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 验证
+  # ==========================================================================
+  - id: phase-1-validation
+    phase: 验证阶段
+  
+  # 1.1 根据类型选择检查项
+  - id: set-default-checks
+    execute:
+      type: script
+      script: |
+        # 默认检查项
+        TYPE="${inputs.type}"
+        
+        if [ -z "${inputs.checks}" ]; then
+          if [ "$TYPE" = "workflow" ]; then
+            echo "checks=[handlers,readme-stats,yaml-syntax]"
+          else
+            echo "checks=[structure,git,dependencies,tasks-yml]"
+          fi
+        else
+          echo "checks=${inputs.checks}"
+        fi
+    output: selected_checks
+  
+  # ==========================================================================
+  # Workflow 模式检查
+  # ==========================================================================
+  - id: validate-handlers
+    if: "inputs.type == 'workflow' and 'handlers' in steps.set-default-checks.selected_checks"
+    tool: validation/validate-handlers
+    input:
+      steps_dir: "${inputs.project_path}/steps"
+      registry_file: "${inputs.project_path}/../agent-runtime/src/core/builtin-handlers.ts"
+    on_failure:
+      severity: error
+      message: "发现未注册的 handler，请在 builtin-handlers.ts 中注册"
+  
+  - id: validate-readme-stats
+    if: "inputs.type == 'workflow' and 'readme-stats' in steps.set-default-checks.selected_checks"
+    tool: validation/validate-readme-stats
+    input:
+      readme_path: "${inputs.project_path}/README.md"
+      tools_dir: "${inputs.project_path}/tools"
+      steps_dir: "${inputs.project_path}/steps"
+      workflows_dir: "${inputs.project_path}/workflows"
+    on_failure:
+      severity: warn
+      message: "README 统计数据过时，请更新"
+  
+  - id: validate-yaml-syntax
+    if: "inputs.type == 'workflow' and 'yaml-syntax' in steps.set-default-checks.selected_checks"
+    tool: validation/validate-yaml-syntax
+    input:
+      search_dirs: ["tools", "steps", "workflows"]
+    on_failure:
+      severity: error
+      message: "发现 YAML 语法错误"
+  
+  # ==========================================================================
+  # Project 模式检查
+  # ==========================================================================
+  - id: check-structure
+    if: "inputs.type == 'project' and 'structure' in steps.set-default-checks.selected_checks"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        
+        echo "🔍 检查项目结构..."
+        
+        ERRORS=()
+        
+        # 检查必要文件
+        if [ ! -f "$PROJECT_PATH/package.json" ]; then
+          ERRORS+=("缺少 package.json")
+        fi
+        
+        if [ ! -d "$PROJECT_PATH/src" ] && [ ! -d "$PROJECT_PATH/lib" ]; then
+          ERRORS+=("缺少 src/ 或 lib/ 目录")
+        fi
+        
+        if [ ${#ERRORS[@]} -gt 0 ]; then
+          echo "❌ 项目结构检查失败:"
+          for e in "${ERRORS[@]}"; do
+            echo "  - $e"
+          done
+          exit 1
+        fi
+        
+        echo "✅ 项目结构检查通过"
+  
+  - id: check-git
+    if: "inputs.type == 'project' and 'git' in steps.set-default-checks.selected_checks"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        
+        echo "🔍 检查 Git 状态..."
+        
+        cd "$PROJECT_PATH"
+        
+        if [ ! -d ".git" ]; then
+          echo "⚠️  不是 Git 仓库"
+          exit 0
+        fi
+        
+        # 检查是否有未提交的更改
+        CHANGES=$(git status --porcelain | wc -l)
+        
+        if [ "$CHANGES" -gt 0 ]; then
+          echo "⚠️  有 $CHANGES 个未提交的更改"
+          git status --short
+        else
+          echo "✅ Git 工作区干净"
+        fi
+  
+  - id: check-dependencies
+    if: "inputs.type == 'project' and 'dependencies' in steps.set-default-checks.selected_checks"
+    tool: npm/install
+    input:
+      repo_path: "${inputs.project_path}"
+  
+  - id: check-tasks-yml
+    if: "inputs.type == 'project' and 'tasks-yml' in steps.set-default-checks.selected_checks"
+    step: planning/validate-tasks
+    input:
+      tasks_path: "${inputs.project_path}/tasks.yml"
+  
+  # ==========================================================================
+  # Phase 2: 汇总
+  # ==========================================================================
+  - id: phase-2-summary
+    phase: 汇总阶段
+  
+  - id: generate-report
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        TYPE="${inputs.type}"
+        
+        echo ""
+        echo "==================================="
+        echo "📊 项目验证报告"
+        echo "==================================="
+        echo "项目路径: ${inputs.project_path}"
+        echo "验证类型: $TYPE"
+        echo ""
+        
+        if [ "$TYPE" = "workflow" ]; then
+          echo "检查项:"
+          echo "  - Handler 注册: ${steps.validate-handlers.status:-skipped}"
+          echo "  - README 统计: ${steps.validate-readme-stats.status:-skipped}"
+          echo "  - YAML 语法: ${steps.validate-yaml-syntax.status:-skipped}"
+        else
+          echo "检查项:"
+          echo "  - 结构检查: ${steps.check-structure.status:-skipped}"
+          echo "  - Git 检查: ${steps.check-git.status:-skipped}"
+          echo "  - 依赖检查: ${steps.check-dependencies.status:-skipped}"
+          echo "  - tasks.yml: ${steps.check-tasks-yml.status:-skipped}"
+        fi
+        
+        echo "==================================="
+
+  - id: notify-result
+    if: "inputs.notify == true"
+    tool: notification/notify
+    input:
+      channel: discord
+      message: |
+        ✅ 项目验证完成
+        
+        类型: ${inputs.type}
+        项目: ${inputs.project_path}
+        
+        检查结果见报告
+
+# 错误处理
+errorHandling:
+  strategy: continue_on_error
+  maxErrors: 3
+  on_error:
+    - log_error
+    - continue
+
+# 输出
+outputs:
+  - name: passed
+    type: boolean
+    description: 是否全部通过
+  
+  - name: type
+    type: string
+    description: 验证类型
+  
+  - name: checks
+    type: object
+    description: 各检查项结果
+  
+  - name: report
+    type: string
+    description: 验证报告
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 2.0.0
+  tags:
+    - validation
+    - quality
+    - ci
+  documentation: /root/knowledge-base/projects/agent-studio/validation-workflow.md

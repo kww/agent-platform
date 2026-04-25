@@ -1,0 +1,26 @@
+# 任务数据
+active-tasks.json
+
+# API Keys（敏感）
+api-keys.sh
+
+# 日志
+*.log
+
+# 临时文件
+tmp/
+*.tmp
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node.js
+node_modules/
+
+# GitHub（保留 workflows）
+.github/*
+!.github/workflows/

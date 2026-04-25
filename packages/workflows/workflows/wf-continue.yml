@@ -1,0 +1,319 @@
+# wf-continue.yml - 智能继续工作流
+# ============================================================================
+# 工作流类型: 入口路由
+# 触发方式: /wf-continue <project_path>
+# 功能: Backlog 驱动的智能工作流入口
+# ============================================================================
+#
+# 核心能力：
+# - 从 backlog.yml 自动选择最紧急待办
+# - 根据类型动态调用对应工作流
+# - 跨 session 状态追踪
+#
+# 路由规则：
+# - bug → wf-bugfix
+# - feature → wf-dev（或 wf-full，根据规模）
+# - enhancement → wf-dev
+# - performance → wf-dev
+# - tech-debt → wf-dev
+# - patch → wf-patch
+# - full → wf-full
+#
+# 流程：
+# 1. 加载项目状态（project/load-state）
+# 2. 智能决策待办（backlog/decide）
+# 3. 确认工作流选择（decide-next-workflow）
+# 4. 执行对应工作流（execute-workflow）
+# 5. 保存项目状态（project/save-state）
+# ============================================================================
+
+id: wf-continue
+stage: develop
+name: 智能继续
+description: |
+  Backlog 驱动的智能工作流入口
+  
+  只需提供项目路径，自动从 backlog 选择最紧急待办，并根据类型调用对应工作流。
+  
+  **路由规则**：
+  - bug → wf-bugfix（Bug 修复）
+  - feature（小）→ wf-dev（开发）
+  - feature（大）→ wf-full（完整流程）
+  - enhancement → wf-dev（增强）
+  - performance → wf-dev（性能优化）
+  - tech-debt → wf-dev（技术债）
+  - patch → wf-patch（极简修改）
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 想继续开发但不知道从哪开始
+  - 项目有 backlog.yml，想自动处理最紧急待办
+  - 跨 session 工作，需要自动恢复状态
+  
+  ⚠️ **不适合**：
+  - 已知具体需求 → 直接用 wf-dev
+  - 单文件小修改 → 直接用 wf-patch
+  - Bug 已定位 → 直接用 wf-bugfix
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🔄"
+  keywords: [继续, 自动, 智能选择, backlog, 下一步]
+  examples:
+    - input: "/wf-continue /root/projects/my-app"
+      output: "从 backlog 选择最紧急待办，自动调用对应工作流"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: dry_run
+    type: boolean
+    required: false
+    default: false
+    description: |
+      预览模式（只显示决策结果，不执行）
+      - true: 显示推荐的待办和工作流
+      - false: 直接执行
+
+  - name: force_workflow
+    type: string
+    required: false
+    description: |
+      强制指定工作流（跳过自动决策）
+      - 可选值: wf-patch, wf-bugfix, wf-quick, wf-dev, wf-full
+      - 不指定时自动决策
+
+# 阶段定义
+phases:
+  - id: load
+    name: 加载状态
+  - id: decide
+    name: 智能决策
+  - id: execute
+    name: 执行工作流
+  - id: save
+    name: 保存状态
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 加载状态
+  # ==========================================================================
+  - id: phase-1-load
+    phase: 加载状态
+  
+  - id: load-project-state
+    name: 加载项目状态
+    step: project/load-state
+    input:
+      project_path: "${inputs.project_path}"
+    output:
+      exists
+      state
+    checkpoint:
+      message: "📁 项目状态已加载"
+
+  # ==========================================================================
+  # Phase 2: 智能决策
+  # ==========================================================================
+  - id: phase-2-decide
+    phase: 智能决策
+  
+  - id: decide-from-backlog
+    name: 从 Backlog 决策待办
+    step: backlog/decide
+    input:
+      project_path: "${inputs.project_path}"
+    output:
+      recommendation
+      suggested_workflow
+      reason
+      queue
+    checkpoint:
+      message: "🎯 已选择待办: ${recommendation.title}"
+
+  - id: confirm-workflow
+    name: 确认工作流选择
+    step: project/decide-next-workflow
+    input:
+      project_path: "${inputs.project_path}"
+    output:
+      decision
+      reason
+      next_workflow
+      suggestions
+    checkpoint:
+      message: "📋 将执行: ${next_workflow}"
+
+  - id: show-decision
+    name: 显示决策结果
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        echo ""
+        echo "==================================="
+        echo "🎯 智能决策结果"
+        echo "==================================="
+        echo ""
+        echo "待办项: ${steps.decide-from-backlog.recommendation.title}"
+        echo "类型: ${steps.decide-from-backlog.recommendation.type}"
+        echo "优先级: ${steps.decide-from-backlog.recommendation.priority}"
+        echo ""
+        echo "推荐工作流: ${steps.confirm-workflow.next_workflow}"
+        echo "理由: ${steps.confirm-workflow.reason}"
+        echo ""
+        if [ "${inputs.dry_run}" = "true" ]; then
+          echo "⚠️ 预览模式：不执行工作流"
+        fi
+        echo "==================================="
+
+  - id: check-dry-run
+    condition: "${inputs.dry_run} == true"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        echo "✅ 预览完成，退出"
+        exit 0
+
+  # ==========================================================================
+  # Phase 3: 执行工作流
+  # ==========================================================================
+  - id: phase-3-execute
+    phase: 执行工作流
+  
+  # 3.1 检查是否强制指定工作流
+  - id: get-target-workflow
+    name: 获取目标工作流
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        if [ -n "${inputs.force_workflow}" ]; then
+          echo "workflow=${inputs.force_workflow}"
+          echo "source=force"
+        else
+          echo "workflow=${steps.confirm-workflow.next_workflow}"
+          echo "source=auto"
+        fi
+    output: workflow_info
+
+  # 3.2 执行工作流（动态调用）
+  - id: execute-target-workflow
+    name: 执行目标工作流
+    execute:
+      type: builtin
+      handler: execute-workflow
+    input:
+      workflow_id: "${steps.get-target-workflow.workflow_info.workflow}"
+      project_path: "${inputs.project_path}"
+      backlog_item: "${steps.decide-from-backlog.recommendation}"
+    output:
+      success
+      result
+      error
+    checkpoint:
+      message: "✅ 工作流执行完成"
+
+  # 3.3 处理执行失败
+  - id: handle-failure
+    condition: "${steps.execute-target-workflow.success} == false"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        echo "❌ 工作流执行失败: ${steps.execute-target-workflow.error}"
+        exit 1
+
+  # ==========================================================================
+  # Phase 4: 保存状态
+  # ==========================================================================
+  - id: phase-4-save
+    phase: 保存状态
+  
+  - id: save-project-state
+    name: 保存项目状态
+    step: project/save-state
+    input:
+      project_path: "${inputs.project_path}"
+      state:
+        last_workflow: "${steps.get-target-workflow.workflow_info.workflow}"
+        last_execution: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        completed_item: "${steps.decide-from-backlog.recommendation.id}"
+    output:
+      state
+    checkpoint:
+      message: "💾 项目状态已保存"
+
+  # ==========================================================================
+  # 完成通知
+  # ==========================================================================
+  - id: notify-complete
+    tool: notification/notify
+    input:
+      channel: discord
+      message: |
+        🔄 wf-continue 完成
+        
+        📋 待办: ${steps.decide-from-backlog.recommendation.title}
+        🔀 工作流: ${steps.get-target-workflow.workflow_info.workflow}
+        ✅ 结果: ${steps.execute-target-workflow.success ? '成功' : '失败'}
+
+# 输出
+outputs:
+  - name: recommendation
+    type: object
+    description: 选择的待办项
+  
+  - name: workflow_executed
+    type: string
+    description: 执行的工作流 ID
+  
+  - name: success
+    type: boolean
+    description: 是否成功
+  
+  - name: result
+    type: object
+    description: 工作流执行结果
+
+# 错误处理
+error_handling:
+  - error: NO_BACKLOG
+    action: abort
+    message: "未找到 backlog.yml，请先创建待办清单"
+  
+  - error: NO_ITEMS
+    action: abort
+    message: "backlog 为空，没有待处理的待办"
+  
+  - error: WORKFLOW_FAILED
+    action: continue
+    message: "工作流执行失败，已记录错误"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags:
+    - entry
+    - router
+    - backlog
+    - intelligent
+    - continue
+  documentation: /root/knowledge-base/projects/agent-workflows/wf-continue.md
+  changelog:
+    - version: 1.0.0
+      date: 2026-04-06
+      changes:
+        - 初始版本
+        - Backlog 驱动智能决策
+        - 动态工作流路由
+        - 跨 session 状态追踪

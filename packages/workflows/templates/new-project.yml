@@ -1,0 +1,148 @@
+# new-project.yml
+# ============================================================================
+# 新项目开发工作流
+# 集成 Spec 约束层（AS-028）
+# ============================================================================
+name: 新项目开发
+description: 从零开始开发新项目
+version: 2.0.0
+
+# 输入参数
+inputs:
+  - name: requirements
+    type: string
+    required: true
+    description: 需求描述
+  
+  - name: spec_mode
+    type: enum
+    default: flexible
+    options: [none, flexible, strict]
+    description: |
+      Spec 模式
+      - none: 不生成 Spec
+      - flexible: 生成 Spec，开发可灵活调整
+      - strict: 严格按 Spec 执行
+  
+  - name: constraint_level
+    type: enum
+    default: advisory
+    options: [none, advisory, binding]
+    description: |
+      约束级别
+      - none: 无约束
+      - advisory: 建议性约束
+      - binding: 强制约束（需要审批）
+
+# 执行步骤
+steps:
+  # 阶段 1: 需求分析
+  - step: analyze-requirements
+    id: req
+    input:
+      requirements: ${{inputs.requirements}}
+  
+  # 阶段 2: 架构设计
+  - step: design-architecture
+    id: arch
+    input:
+      spec: ${{steps.req.output.spec}}
+    output:
+      - architecture.md
+  
+  # 阶段 3: Spec 生成（可选）
+  - step: generate-spec
+    id: spec
+    condition: "${inputs.spec_mode} != 'none'"
+    input:
+      source: "${steps.arch.output.architecture_md}"
+      spec_mode: "${inputs.spec_mode}"
+      constraint_level: "${inputs.constraint_level}"
+    output:
+      - ARCHITECTURE.md
+      - spec_version
+      - changes
+  
+  # 阶段 4: Spec 审批（binding 模式）
+  - step: review-spec-approval
+    id: approval
+    condition: "${inputs.constraint_level} == 'binding'"
+    input:
+      changes: "${steps.spec.output.changes}"
+      title: "新项目架构审批"
+      constraint_level: "${inputs.constraint_level}"
+  
+  # 阶段 5: 并行开发
+  - parallel:
+      - step: develop-frontend
+        id: frontend
+        input:
+          design: ${{steps.arch.output}}
+          spec: ${{steps.spec.output}}
+      
+      - step: develop-backend
+        id: backend
+        input:
+          design: ${{steps.arch.output}}
+          spec: ${{steps.spec.output}}
+  
+  # 阶段 6: Spec 验证
+  - step: review-spec
+    id: verify
+    condition: "${inputs.spec_mode} != 'none'"
+    input:
+      task:
+        id: "architecture-compliance"
+        name: "架构符合性验证"
+        acceptance_criteria: "代码实现符合 ARCHITECTURE.md 定义"
+      implementation:
+        files_changed: "${steps.frontend.output.files},${steps.backend.output.files}"
+      project:
+        path: "${project.path}"
+    output:
+      - passed
+      - score
+      - issues
+  
+  # 阶段 7: 测试
+  - step: run-tests
+    id: tests
+    input:
+      code:
+        frontend: ${{steps.frontend.output}}
+        backend: ${{steps.backend.output}}
+  
+  # 阶段 8: 提交
+  - step: commit-push
+    input:
+      message: "feat: ${{inputs.requirements}}"
+
+# 输出
+outputs:
+  - name: architecture.md
+    description: 架构规划文档
+  
+  - name: ARCHITECTURE.md
+    condition: "${inputs.spec_mode} != 'none'"
+    description: Spec 格式架构文档
+  
+  - name: spec_compliance
+    condition: "${inputs.spec_mode} != 'none'"
+    description: Spec 符合性验证结果
+
+# 元数据
+metadata:
+  author: system
+  created_at: 2026-04-14
+  updated_at: 2026-04-14
+  version: 2.0.0
+  changes:
+    - date: 2026-04-14
+      version: 2.0.0
+      description: 集成 Spec 约束层（AS-028）
+      changes:
+        - 添加 spec_mode 输入参数
+        - 添加 constraint_level 输入参数
+        - 添加 generate-spec 步骤
+        - 添加 review-spec-approval 步骤（binding 模式）
+        - 添加 review-spec 验证步骤

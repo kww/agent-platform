@@ -1,0 +1,119 @@
+# wf-dev/core-verify.yml - 共享核心：验证阶段
+# ============================================================================
+# 用途：测试验证的核心逻辑，所有模式共享
+# 输入：project_path, execution_results
+# 输出：验证结果
+# ============================================================================
+
+id: wf-dev/core-verify
+name: 验证阶段
+description: |
+  验证阶段核心逻辑：
+  - 运行测试
+  - 代码审查
+  - 调试修复
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  execution_results:
+    type: object
+    description: 执行结果
+    required: false
+  
+  enable_review:
+    type: boolean
+    description: 是否启用代码审查
+    required: false
+    default: true
+  
+  test_command:
+    type: string
+    description: 测试命令
+    required: false
+    default: "npm test"
+
+# 输出
+outputs:
+  - name: test_result
+    type: object
+    description: 测试结果
+  
+  - name: review_result
+    type: object
+    description: 审查结果
+  
+  - name: all_passed
+    type: boolean
+    description: 是否全部通过
+
+# 步骤流程
+steps:
+  # 1. 运行测试
+  - id: run-tests
+    name: 运行测试
+    step: quality/run-tests
+    input:
+      project_path: "${inputs.project_path}"
+      command: "${inputs.test_command}"
+    output:
+      result
+      passed
+      coverage
+  
+  # 2. 测试失败时调试
+  - id: debug-if-failed
+    condition: "${steps.run-tests.passed} == false"
+    step: quality/debug-systematic
+    input:
+      error_message: "${steps.run-tests.error}"
+      code_path: "${inputs.project_path}"
+    output: debug_result
+  
+  # 3. 修复问题
+  - id: fix-if-needed
+    condition: "${steps.run-tests.passed} == false"
+    step: development/fix-issues
+    input:
+      debug_result: "${steps.debug-if-failed.debug_result}"
+    output: fix_result
+  
+  # 4. 代码审查
+  - id: review-code
+    condition: "${inputs.enable_review} == true"
+    step: quality/review-code
+    input:
+      project_path: "${inputs.project_path}"
+    output:
+      passed
+      score
+      issues
+  
+  # 5. 汇总验证结果
+  - id: summarize-verification
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        TEST_PASSED="${steps.run-tests.passed}"
+        REVIEW_PASSED="${steps.review-code.passed:-true}"
+        
+        if [ "$TEST_PASSED" = "true" ] && [ "$REVIEW_PASSED" = "true" ]; then
+          echo "✅ 验证通过"
+          echo "all_passed=true"
+        else
+          echo "❌ 验证未通过"
+          echo "all_passed=false"
+        fi
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, core, verify, test, review]

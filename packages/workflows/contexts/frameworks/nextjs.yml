@@ -1,0 +1,66 @@
+# Next.js 项目上下文
+
+language: typescript
+framework: nextjs
+
+entryPoints:
+  - src/app/page.tsx
+  - src/pages/index.tsx
+  - app/page.tsx
+  - pages/index.tsx
+
+commonPatterns:
+  - "App Router"
+  - "Server Components"
+  - "Server Actions"
+  - "API Routes"
+  - "Middleware"
+
+excludeDirs:
+  - .next
+  - node_modules
+  - out
+  - coverage
+
+testPatterns:
+  - "**/*.test.tsx"
+  - "**/*.spec.tsx"
+  - "**/__tests__/**"
+
+defaultPipelines:
+  frontend: frontend-nextjs
+  backend: backend-nextjs-api
+  test: jest
+
+commonPages:
+  - app/page.tsx
+  - app/layout.tsx
+  - app/api/
+
+commonComponents:
+  - components/
+  - src/components/
+
+styling:
+  - tailwindcss
+  - css-modules
+  - styled-components
+
+stateManagement:
+  - zustand
+  - recoil
+  - redux
+
+bestPractices:
+  - "使用 App Router"
+  - "Server Components 优先"
+  - "使用 Server Actions 处理表单"
+  - "图片使用 next/image"
+  - "链接使用 next/link"
+
+commonDependencies:
+  - next
+  - react
+  - react-dom
+  - typescript
+  - tailwindcss

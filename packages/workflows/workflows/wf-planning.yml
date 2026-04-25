@@ -1,0 +1,696 @@
+# wf-planning.yml - 规划工作流
+# ============================================================================
+# 工作流类型: 规划流程
+# 触发方式: /wf-planning <需求> [--mode new_project|incremental|iterative]
+# Superpowers 整合: ✅ brainstorming + writing-plans + Anthropic 模式
+# 用途: 项目规划，支持新项目和增量规划
+# ============================================================================
+#
+# 模式说明：
+# - new_project: 全新项目规划（默认）
+# - incremental: 已有项目 + 新功能（从 backlog 加载）
+# - iterative: 需求迭代（更新已有 tasks.yml）
+#
+# Anthropic 模式扩展：
+# - feature_list.json: 功能清单（含 passes 字段）
+# - progress.json: 跨 session 进度追踪
+# - init.sh: 项目启动脚本
+#
+# 输出兼容：
+# - tasks.yml: 传统任务清单格式
+# - feature_list.json: Anthropic 模式格式
+# ============================================================================
+
+id: wf-planning
+stage: plan
+name: 项目规划流程
+description: |
+  项目规划流程，支持三种模式：
+  
+  **new_project（全新项目）**：
+  - 需求分析 → 架构设计 → 生成任务清单
+  - 输出 requirements.md, architecture.md, tasks.yml
+  
+  **incremental（增量规划）**：
+  - 从 backlog 加载 Feature → 分析已有架构 → 生成增量任务
+  - 支持已有项目添加新功能
+  
+  **iterative（需求迭代）**：
+  - 更新已有 tasks.yml
+  - 保留已完成任务，只更新未完成部分
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 新项目前期规划 → mode: new_project
+  - 已有项目添加新功能 → mode: incremental
+  - 需求迭代和变更 → mode: iterative
+  
+  ⚠️ **输出**：
+  - requirements.md 需求文档
+  - architecture.md 架构设计
+  - tasks.yml 任务清单
+  - feature_list.json 功能清单
+  - progress.json 进度追踪
+  
+  📝 **后续步骤**：
+  - 运行 wf-dev 开始开发
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "📋"
+  keywords: [规划, 需求, 架构, 设计, 增量, 迭代]
+  examples:
+    - input: "/wf-planning '开发一个博客系统'"
+      output: "全新项目规划：架构 + tasks.yml"
+    - input: "/wf-planning --feature_id FEAT-001 --mode incremental"
+      output: "增量规划：从 backlog 加载 + 分析现有架构 + 增量任务"
+    - input: "/wf-planning --feature_id FEAT-001 --mode iterative"
+      output: "需求迭代：更新 tasks.yml，保留已完成任务"
+
+# Superpowers 整合
+superpowers:
+  - brainstorming
+  - writing-plans
+
+# 输入参数
+inputs:
+  - name: requirement
+    type: string
+    required: false
+    description: 用户需求描述（new_project 模式必填）
+  
+  - name: mode
+    type: string
+    required: false
+    default: new_project
+    enum: [new_project, incremental, iterative]
+    description: |
+      规划模式：
+      - new_project: 全新项目规划
+      - incremental: 已有项目 + 新功能
+      - iterative: 需求迭代
+  
+  - name: feature_id
+    type: string
+    required: false
+    description: Feature ID（incremental/iterative 模式必填）
+  
+  - name: project_name
+    type: string
+    required: false
+    description: 项目名称
+    default: "new-project"
+  
+  - name: project_path
+    type: path
+    required: false
+    description: 项目目录路径
+  
+  - name: output_format
+    type: string
+    required: false
+    default: both
+    enum: [tasks, feature_list, both]
+    description: 输出格式
+  
+  - name: tech_stack
+    type: array
+    required: false
+    description: 技术栈（可选，会自动推断）
+  
+  - name: enable_task_split
+    type: boolean
+    required: false
+    default: false
+    description: 启用任务拆分
+  
+  - name: split_threshold
+    type: object
+    required: false
+    description: 拆分阈值（complexity 和 estimated_time）
+  
+  - name: max_subtasks
+    type: number
+    required: false
+    default: 5
+    description: 每个任务最大子任务数
+
+# 阶段定义
+phases:
+  - id: load
+    name: 加载阶段
+    parallel: false
+  - id: analysis
+    name: 分析阶段
+    parallel: false
+  - id: design
+    name: 设计阶段
+    parallel: false
+  - id: planning
+    name: 规划阶段
+    parallel: false
+  - id: validation
+    name: 校验阶段
+    parallel: false
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 0: 加载阶段（incremental/iterative 模式）
+  # ==========================================================================
+  - id: phase-0-load
+    phase: 加载阶段
+  
+  # 0.1 从 backlog 加载 Feature（incremental/iterative 模式）
+  - id: load-feature
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    step: backlog/load
+    input:
+      project_path: "${inputs.project_path}"
+      item_id: "${inputs.feature_id}"
+    output:
+      feature
+      feature_title
+      feature_description
+      feature_acceptance
+    on_fail: continue
+  
+  # 0.2 加载已有 tasks.yml（iterative 模式）
+  - id: load-existing-tasks
+    condition: "${inputs.mode} == 'iterative'"
+    execute:
+      type: builtin
+      handler: load-tasks
+    input:
+      path: "${inputs.project_path}/tasks.yml"
+    output:
+      existing_tasks
+      completed_count
+      pending_count
+  
+  # 0.3 分析已有项目架构（incremental/iterative 模式）
+  - id: analyze-existing-project
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    step: analysis/analyze-codebase
+    input:
+      project_path: "${inputs.project_path}"
+      focus: architecture
+    output:
+      existing_architecture
+      existing_modules
+      existing_tech_stack
+    on_fail: continue
+
+  # ==========================================================================
+  # Phase 1: 分析阶段
+  # ==========================================================================
+  - id: phase-1-analysis
+    phase: 分析阶段
+  
+  # 1.1 需求分析（new_project 模式）
+  - id: analyze-requirements-new
+    condition: "${inputs.mode} == 'new_project'"
+    step: analysis/analyze-requirements
+    input:
+      requirement: "${inputs.requirement}"
+    output: requirements.md
+    checkpoint:
+      verify: requirements.md exists
+      message: "需求文档已生成"
+  
+  # 1.2 需求分析（incremental/iterative 模式，从 backlog）
+  - id: analyze-requirements-incremental
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    step: analysis/analyze-requirements
+    input:
+      requirement: "${steps.load-feature.feature_description}"
+      acceptance_criteria: "${steps.load-feature.feature_acceptance}"
+      context: "${steps.analyze-existing-project.existing_architecture}"
+    output: requirements.md
+    checkpoint:
+      verify: requirements.md exists
+      message: "需求文档已生成"
+  
+  # 1.3 技术栈推断（new_project 模式）
+  - id: infer-tech-stack
+    condition: "${inputs.tech_stack} == null and ${inputs.mode} == 'new_project'"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        # 从需求中推断技术栈
+        
+        REQUIREMENT="${inputs.requirement}"
+        
+        # 简单推断规则
+        if [[ "$REQUIREMENT" =~ "前端"|"UI"|"页面"|"组件" ]]; then
+          echo "tech_stack=[react,typescript,tailwind]"
+        elif [[ "$REQUIREMENT" =~ "API"|"后端"|"服务" ]]; then
+          echo "tech_stack=[nodejs,typescript,express,postgresql]"
+        elif [[ "$REQUIREMENT" =~ "全栈"|"完整" ]]; then
+          echo "tech_stack=[react,nodejs,typescript,postgresql]"
+        else
+          echo "tech_stack=[typescript,nodejs]"  # 默认
+        fi
+    output: inferred_stack
+  
+  # ==========================================================================
+  # Phase 2: 设计阶段
+  # ==========================================================================
+  - id: phase-2-design
+    phase: 设计阶段
+  
+  # 2.1 架构设计（new_project 模式）
+  - id: design-architecture-new
+    condition: "${inputs.mode} == 'new_project'"
+    name: 架构设计
+    step: design/design-architecture
+    input:
+      requirements: "${steps.analyze-requirements-new.output}"
+      tech_stack: "${inputs.tech_stack || steps.infer-tech-stack.inferred_stack}"
+    output: architecture.md
+    checkpoint:
+      verify: architecture.md exists
+      message: "架构文档已生成"
+  
+  # 2.2 架构影响分析（incremental/iterative 模式）
+  - id: analyze-architecture-impact
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    name: 架构影响分析
+    step: design/analyze-architecture-impact
+    input:
+      requirements: "${steps.analyze-requirements-incremental.output}"
+      existing_architecture: "${steps.analyze-existing-project.existing_architecture}"
+      existing_modules: "${steps.analyze-existing-project.existing_modules}"
+    output:
+      impact_analysis
+      modules_to_modify
+      modules_to_add
+      breaking_changes
+    checkpoint:
+      message: "架构影响分析完成"
+  
+  # 2.3 更新架构文档（incremental/iterative 模式）
+  - id: update-architecture
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    name: 更新架构文档
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        ARCH_FILE="$PROJECT_PATH/architecture.md"
+        
+        # 如果架构文件存在，追加影响分析
+        if [ -f "$ARCH_FILE" ]; then
+          echo "" >> "$ARCH_FILE"
+          echo "## 新功能影响分析" >> "$ARCH_FILE"
+          echo "" >> "$ARCH_FILE"
+          echo "### 需要修改的模块" >> "$ARCH_FILE"
+          echo "${steps.analyze-architecture-impact.modules_to_modify}" | jq -r '.[] | "- " + .' >> "$ARCH_FILE"
+          echo "" >> "$ARCH_FILE"
+          echo "### 需要新增的模块" >> "$ARCH_FILE"
+          echo "${steps.analyze-architecture-impact.modules_to_add}" | jq -r '.[] | "- " + .' >> "$ARCH_FILE"
+          echo "✅ 架构文档已更新"
+        else
+          echo "⚠️ 架构文档不存在，跳过更新"
+        fi
+  
+  # 2.4 API 设计（可选）
+  - id: design-api
+    name: API 设计
+    condition: "${inputs.mode} == 'new_project' and (${steps.infer-tech-stack.inferred_stack} contains 'API' or '后端')"
+    step: design/design-api
+    input:
+      architecture: "${steps.design-architecture-new.output}"
+    output: openapi.yaml
+    checkpoint:
+      verify: openapi.yaml exists
+      message: "API 契约已生成"
+  
+  # 2.5 数据库设计（可选）
+  - id: design-db
+    name: 数据库设计
+    condition: "${inputs.mode} == 'new_project' and (${steps.infer-tech-stack.inferred_stack} contains 'postgresql' or 'mysql')"
+    step: design/design-db
+    input:
+      architecture: "${steps.design-architecture-new.output}"
+    output: db-schema.sql
+
+  # ==========================================================================
+  # Phase 3: 规划阶段
+  # ==========================================================================
+  - id: phase-3-planning
+    phase: 规划阶段
+  
+  # 3.1 生成 tasks.yml（new_project 模式）
+  - id: generate-tasks-new
+    condition: "${inputs.mode} == 'new_project' and ${inputs.output_format} in ['tasks', 'both']"
+    name: 生成任务清单
+    step: planning/generate-tasks
+    input:
+      requirements: "${steps.analyze-requirements-new.output}"
+      architecture: "${steps.design-architecture-new.output}"
+      project_path: "${inputs.project_path}"
+      project_name: "${inputs.project_name}"
+      tech_stack: "${inputs.tech_stack || steps.infer-tech-stack.inferred_stack}"
+    output: tasks.yml
+    checkpoint:
+      verify: tasks.yml exists
+      message: "📋 任务清单已生成"
+  
+  # 3.2 生成增量 tasks.yml（incremental 模式）
+  - id: generate-tasks-incremental
+    condition: "${inputs.mode} == 'incremental' and ${inputs.output_format} in ['tasks', 'both']"
+    name: 生成增量任务清单
+    step: planning/generate-tasks
+    input:
+      requirements: "${steps.analyze-requirements-incremental.output}"
+      architecture: "${steps.analyze-architecture-impact.impact_analysis}"
+      project_path: "${inputs.project_path}"
+      project_name: "${inputs.project_name}"
+      existing_modules: "${steps.analyze-existing-project.existing_modules}"
+      mode: incremental
+    output: tasks.yml
+    checkpoint:
+      verify: tasks.yml exists
+      message: "📋 增量任务清单已生成"
+  
+  # 3.3 更新 tasks.yml（iterative 模式）
+  - id: update-tasks-iterative
+    condition: "${inputs.mode} == 'iterative'"
+    name: 更新任务清单
+    step: planning/update-tasks
+    input:
+      existing_tasks: "${steps.load-existing-tasks.existing_tasks}"
+      new_requirements: "${steps.analyze-requirements-incremental.output}"
+      architecture_impact: "${steps.analyze-architecture-impact.impact_analysis}"
+      project_path: "${inputs.project_path}"
+    output:
+      tasks.yml
+      updated_count
+      preserved_count
+    checkpoint:
+      message: "📋 任务清单已更新（保留 ${preserved_count} 个已完成）"
+  
+  # 3.4 任务拆分（可选）
+  - id: split-tasks
+    name: 任务拆分
+    condition: "${inputs.enable_task_split} == true"
+    step: planning/split-tasks
+    input:
+      tasks: "${steps.generate-tasks-new.output || steps.generate-tasks-incremental.output || steps.update-tasks-iterative.output}"
+      split_strategy: "${inputs.split_strategy}"
+      split_threshold: "${inputs.split_threshold}"
+      max_subtasks: "${inputs.max_subtasks}"
+    output:
+      split_tasks
+      split_count
+      split_summary
+    checkpoint:
+      message: "📋 已拆分 ${split_count} 个大任务"
+  
+  # 3.5 生成 feature_list.json（new_project 模式）
+  - id: generate-feature-list-new
+    condition: "${inputs.mode} == 'new_project' and ${inputs.output_format} in ['feature_list', 'both']"
+    name: 生成功能清单
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        ARCHITECTURE="${steps.design-architecture-new.output}"
+        REQUIREMENTS="${steps.analyze-requirements-new.output}"
+        
+        echo "生成 feature_list.json..."
+    output: feature_list.json
+  
+  # 3.6 更新 feature_list.json（incremental/iterative 模式）
+  - id: update-feature-list
+    condition: "${inputs.mode} in ['incremental', 'iterative'] and ${inputs.output_format} in ['feature_list', 'both']"
+    name: 更新功能清单
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        FEATURE_ID="${inputs.feature_id}"
+        FEATURE_TITLE="${steps.load-feature.feature_title}"
+        FEATURE_DESC="${steps.load-feature.feature_description}"
+        
+        # 更新或添加 feature
+        if [ -f "$PROJECT_PATH/feature_list.json" ]; then
+          # 添加新功能到已有列表
+          jq ".features += [{\"id\": \"$FEATURE_ID\", \"name\": \"$FEATURE_TITLE\", \"description\": \"$FEATURE_DESC\", \"status\": \"pending\"}]" "$PROJECT_PATH/feature_list.json" > "$PROJECT_PATH/feature_list.json.tmp"
+          mv "$PROJECT_PATH/feature_list.json.tmp" "$PROJECT_PATH/feature_list.json"
+          echo "✅ 功能清单已更新"
+        else
+          # 创建新文件
+          echo "{\"features\": [{\"id\": \"$FEATURE_ID\", \"name\": \"$FEATURE_TITLE\", \"description\": \"$FEATURE_DESC\", \"status\": \"pending\"}]}" > "$PROJECT_PATH/feature_list.json"
+          echo "✅ 功能清单已创建"
+        fi
+    output: feature_list.json
+  
+  # 3.7 更新 backlog.yml（incremental/iterative 模式）
+  - id: update-backlog
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    name: 更新 backlog
+    step: backlog/update
+    input:
+      project_path: "${inputs.project_path}"
+      item_id: "${inputs.feature_id}"
+      updates:
+        spec: "${steps.analyze-requirements-incremental.output}"
+        tasks_path: "${inputs.project_path}/tasks.yml"
+        feature_list_path: "${inputs.project_path}/feature_list.json"
+    on_fail: continue
+    output: backlog_update_result
+  
+  # 3.8 生成 progress.json
+  - id: generate-progress
+    name: 生成进度追踪文件
+    condition: "${inputs.output_format} in ['feature_list', 'both']"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        
+        # 初始化进度追踪
+        # 格式示例：
+        # {
+        #   "project_name": "${inputs.project_name}",
+        #   "started_at": "2026-04-06T15:00:00Z",
+        #   "current_phase": "planning",
+        #   "features": {
+        #     "auth": { "status": "pending", "passes": [] }
+        #   },
+        #   "sessions": []
+        # }
+        
+        echo "生成 progress.json..."
+    output: progress.json
+  
+  # 3.4 生成 init.sh
+  - id: generate-init-script
+    name: 生成项目启动脚本
+    condition: "${inputs.output_format} in ['feature_list', 'both']"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        # Anthropic 模式：生成 init.sh
+        
+        PROJECT_PATH="${inputs.project_path}"
+        TECH_STACK="${inputs.tech_stack || steps.infer-tech-stack.inferred_stack}"
+        
+        # 根据技术栈生成启动脚本
+        cat > "$PROJECT_PATH/init.sh" << 'EOF'
+        #!/bin/bash
+        # 项目启动脚本
+        
+        echo "🚀 初始化项目..."
+        
+        # 安装依赖
+        npm install
+        
+        # 初始化数据库
+        if [ -f "db-schema.sql" ]; then
+          echo "初始化数据库..."
+          # 数据库初始化命令
+        fi
+        
+        # 启动开发服务器
+        npm run dev
+        EOF
+        
+        chmod +x "$PROJECT_PATH/init.sh"
+        
+        echo "✅ init.sh 已生成"
+    output: init.sh
+  
+  # ==========================================================================
+  # Phase 4: 校验阶段
+  # ==========================================================================
+  - id: phase-4-validation
+    phase: 校验阶段
+  
+  # 4.1 校验 tasks.yml
+  - id: validate-tasks
+    name: 校验任务清单
+    condition: "${inputs.output_format} in ['tasks', 'both']"
+    execute:
+      type: builtin
+      handler: validate-tasks
+    input:
+      tasks_path: "${inputs.project_path}/tasks.yml"
+      strict: true
+    output:
+      - valid
+      - errors
+      - warnings
+    checkpoint:
+      verify: valid == true
+      message: "✅ tasks.yml 校验通过"
+  
+  # 4.2 校验 feature_list.json
+  - id: validate-feature-list
+    name: 校验功能清单
+    condition: "${inputs.output_format} in ['feature_list', 'both']"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        # 校验 feature_list.json 格式
+        
+        FEATURE_LIST="${inputs.project_path}/feature_list.json"
+        
+        # JSON 格式校验
+        if ! jq empty "$FEATURE_LIST" 2>/dev/null; then
+          echo "ERROR: feature_list.json 格式错误"
+          exit 1
+        fi
+        
+        # 必须包含 features 字段
+        if ! jq -e '.features' "$FEATURE_LIST" > /dev/null; then
+          echo "ERROR: feature_list.json 缺少 features 字段"
+          exit 1
+        fi
+        
+        echo "✅ feature_list.json 校验通过"
+    checkpoint:
+      message: "✅ feature_list.json 校验通过"
+  
+  # 4.3 生成完成报告
+  - id: generate-summary
+    name: 生成规划摘要
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        echo ""
+        echo "==================================="
+        echo "📋 项目规划完成"
+        echo "==================================="
+        echo "项目: ${inputs.project_name}"
+        echo "路径: ${inputs.project_path}"
+        echo ""
+        echo "生成文件:"
+        echo "  ✅ requirements.md"
+        echo "  ✅ architecture.md"
+        ${inputs.output_format in ['tasks', 'both'] && "  ✅ tasks.yml"}
+        ${inputs.output_format in ['feature_list', 'both'] && "  ✅ feature_list.json"}
+        ${inputs.output_format in ['feature_list', 'both'] && "  ✅ progress.json"}
+        ${inputs.output_format in ['feature_list', 'both'] && "  ✅ init.sh"}
+        echo ""
+        echo "下一步: 运行 wf-dev 开始开发"
+        echo "==================================="
+
+# 输出
+outputs:
+  - name: requirements.md
+    type: file
+    path: "${inputs.project_path}/requirements.md"
+  
+  - name: architecture.md
+    type: file
+    path: "${inputs.project_path}/architecture.md"
+  
+  - name: tasks.yml
+    type: file
+    path: "${inputs.project_path}/tasks.yml"
+    condition: "${inputs.output_format} in ['tasks', 'both']"
+  
+  - name: feature_list.json
+    type: file
+    path: "${inputs.project_path}/feature_list.json"
+    condition: "${inputs.output_format} in ['feature_list', 'both']"
+  
+  - name: progress.json
+    type: file
+    path: "${inputs.project_path}/progress.json"
+    condition: "${inputs.output_format} in ['feature_list', 'both']"
+  
+  - name: init.sh
+    type: file
+    path: "${inputs.project_path}/init.sh"
+    condition: "${inputs.output_format} in ['feature_list', 'both']"
+  
+  - name: impact_analysis
+    type: object
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    description: 架构影响分析结果
+  
+  - name: backlog_update_result
+    type: object
+    condition: "${inputs.mode} in ['incremental', 'iterative']"
+    description: backlog 更新结果
+
+# 错误处理
+error_handling:
+  - error: FEATURE_NOT_FOUND
+    action: abort
+    message: "未找到指定的 Feature ID"
+  
+  - error: TASKS_VALIDATION_FAILED
+    action: warn
+    message: "tasks.yml 校验失败，请检查格式"
+  
+  - error: ARCHITECTURE_IMPACT_ERROR
+    action: continue
+    message: "架构影响分析失败，继续执行"
+
+# 下一步建议
+next_steps:
+  - workflow: wf-dev
+    input:
+      project_path: "${inputs.project_path}"
+    message: "🚀 开始开发阶段"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 2.1.0
+  tags:
+    - planning
+    - architecture
+    - requirements
+    - feature-list
+    - task-split
+  changelog:
+    - version: 2.1.0
+      date: 2026-04-07
+      changes:
+        - 新增任务拆分功能（AW-022）
+        - 新增 enable_task_split 参数
+        - 新增 split_strategy 参数
+        - 新增 split_threshold 参数
+        - 集成 split-tasks 步骤
+    - version: 2.0.0
+      date: 2026-04-02
+      changes:
+        - 初始版本
+        - 支持 tasks.yml 和 feature_list.json 两种输出格式
+  documentation: /root/knowledge-base/projects/agent-studio/planning-workflow.md

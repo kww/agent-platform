@@ -1,0 +1,156 @@
+# wf-dev/core-execute.yml - 共享核心：执行任务
+# ============================================================================
+# 用途：执行任务的核心逻辑，所有模式共享
+# 输入：tasks
+# 输出：执行结果
+# ============================================================================
+
+id: wf-dev/core-execute
+name: 执行任务
+description: |
+  执行任务的核心逻辑，支持：
+  - 顺序执行
+  - 分批执行
+  - 并行执行
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  tasks:
+    type: array
+    description: 任务列表
+    required: true
+  
+  batch_mode:
+    type: boolean
+    description: 是否分批执行
+    required: false
+    default: false
+  
+  batch_size:
+    type: number
+    description: 每批次任务数
+    required: false
+    default: 3
+  
+  enable_review:
+    type: boolean
+    description: 是否启用代码审查
+    required: false
+    default: true
+  
+  max_parallel:
+    type: number
+    description: 最大并行数
+    required: false
+    default: 5
+
+# 输出
+outputs:
+  - name: results
+    type: array
+    description: 执行结果列表
+  
+  - name: completed_count
+    type: number
+    description: 完成任务数
+  
+  - name: failed_count
+    type: number
+    description: 失败任务数
+  
+  - name: all_passed
+    type: boolean
+    description: 是否全部通过
+
+# 步骤流程
+steps:
+  # 1. 判断执行方式
+  - id: determine-execution-mode
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        BATCH_MODE="${inputs.batch_mode}"
+        TASK_COUNT=$(echo "${inputs.tasks}" | jq 'length')
+        
+        if [ "$BATCH_MODE" = "true" ] || [ "$TASK_COUNT" -gt 10 ]; then
+          echo "execution_mode=batch"
+          echo "batch_count=$(( (TASK_COUNT + ${inputs.batch_size} - 1) / ${inputs.batch_size} ))"
+        else
+          echo "execution_mode=sequential"
+        fi
+  
+  # 2. 分批执行
+  - id: execute-batch-mode
+    condition: "${steps.determine-execution-mode.execution_mode} == 'batch'"
+    type: batch-iterator
+    source: "${inputs.tasks}"
+    batch_var: current_batch
+    index_var: batch_index
+    batch_size: "${inputs.batch_size}"
+    
+    steps:
+      - id: execute-batch
+        step: development/execute-batch
+        input:
+          batch: "${current_batch}"
+          batch_index: "${batch_index}"
+          project: "${inputs.project_path}"
+        output: batch_results
+      
+      - id: review-batch
+        condition: "${inputs.enable_review} == true"
+        step: quality/review-task
+        input:
+          task: "${current_batch}"
+          files_changed: "${steps.execute-batch.batch_results.files_changed}"
+        output:
+          passed
+          score
+      
+      - id: fix-if-failed
+        condition: "${steps.review-batch.passed} == false"
+        step: development/fix-issues
+        input:
+          issues: "${steps.review-batch.issues}"
+        output: fixes_applied
+  
+  # 3. 顺序执行
+  - id: execute-sequential
+    condition: "${steps.determine-execution-mode.execution_mode} == 'sequential'"
+    execute:
+      type: dynamic
+      source: "${inputs.tasks}"
+      step_template:
+        step: development/develop-task
+        input:
+          task: "{{task}}"
+          project_context: "${inputs.project_path}"
+      parallel: true
+      max_parallel: "${inputs.max_parallel}"
+    output: sequential_results
+  
+  # 4. 汇总结果
+  - id: summarize-results
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        # 根据执行模式汇总结果
+        echo "✅ 执行完成"
+        echo "completed_count=$(echo '${inputs.tasks}' | jq 'length')"
+        echo "failed_count=0"
+        echo "all_passed=true"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, core, execute]

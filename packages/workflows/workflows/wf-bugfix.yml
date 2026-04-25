@@ -1,0 +1,385 @@
+# wf-bugfix.yml - Bug 系统性修复工作流
+# ============================================================================
+# 工作流类型: L1 轻量工作流
+# 触发方式: /wf-bugfix <project_path> [bug_id]
+# 功能: Bug 系统性修复，支持从 Backlog 自动读取
+# ============================================================================
+#
+# 输入模式：
+# 1. 指定 bug_id：从 backlog.yml 读取对应 Bug
+# 2. 不指定 bug_id：自动选择 priority 最高的 open Bug
+# 3. 直接提供 bug_description：手动描述 Bug
+#
+# 流程：
+# 1. 获取 Bug 信息（backlog/list 或 backlog/decide）
+# 2. 诊断问题（bugfix/diagnose）
+# 3. 修复问题（bugfix/fix）
+# 4. 验证修复（bugfix/verify）
+# 5. Git 提交
+# 6. 标记解决（backlog/resolve）
+# ============================================================================
+
+id: wf-bugfix
+stage: fix
+name: Bug Fix
+description: |
+  L1 轻量工作流 - Bug 系统性修复
+  
+  **支持三种输入模式**：
+  1. 指定 bug_id：从 backlog.yml 读取对应 Bug
+  2. 不指定 bug_id：自动选择 priority 最高的 open Bug
+  3. 直接提供 bug_description：手动描述 Bug
+  
+  完成后自动调用 backlog/resolve 标记解决。
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 已有 Bug 记录在 backlog.yml → 指定 bug_id
+  - 不知道先修哪个 Bug → 不指定 bug_id，自动选择
+  - 临时发现的 Bug → 直接提供 bug_description
+  - 需要定位根因后修复
+  - 需要验证修复效果
+  
+  ⚠️ **不适合**：
+  - 文案修改 → 用 wf-patch
+  - 新功能开发 → 用 wf-quick
+  - 大型重构 → 用 wf-dev
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🐛"
+  keywords: [bug, 修复, 错误, 异常, fix]
+  examples:
+    - input: "/wf-bugfix /root/projects/my-app BUG-001"
+      output: "从 backlog 读取 BUG-001，修复后标记解决"
+    - input: "/wf-bugfix /root/projects/my-app"
+      output: "自动选择最紧急 Bug，修复后标记解决"
+    - input: "/wf-bugfix /root/projects/my-app --bug_description '登录报错'"
+      output: "直接修复描述的 Bug"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: bug_id
+    type: string
+    required: false
+    description: |
+      Bug ID（可选）
+      - 指定时：从 backlog.yml 读取对应 Bug
+      - 不指定：自动选择 priority 最高的 open Bug
+      - 示例：BUG-001, BUG-042
+  
+  - name: bug_description
+    type: string
+    required: false
+    description: |
+      Bug 描述（可选）
+      - 不指定 bug_id 时可提供
+      - 直接描述要修复的 Bug
+      - 如果都未指定，从 backlog 自动选择
+  
+  - name: error_log
+    type: string
+    required: false
+    description: 错误日志（可选）
+  
+  - name: auto_resolve
+    type: boolean
+    required: false
+    default: true
+    description: |
+      是否自动标记解决
+      - true：修复成功后自动调用 backlog/resolve
+      - false：只修复，不标记解决
+
+# 阶段定义
+phases:
+  - id: load
+    name: 加载 Bug
+  - id: diagnose
+    name: 诊断问题
+  - id: fix
+    name: 修复问题
+  - id: verify
+    name: 验证修复
+  - id: resolve
+    name: 标记解决
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 加载 Bug
+  # ==========================================================================
+  - id: phase-1-load
+    phase: 加载 Bug
+  
+  # 1.1 判断输入模式
+  - id: determine-bug-source
+    name: 判断 Bug 来源
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        BUG_ID="${inputs.bug_id}"
+        BUG_DESC="${inputs.bug_description}"
+        
+        if [ -n "$BUG_ID" ]; then
+          echo "mode=by_id"
+          echo "source=backlog"
+        elif [ -n "$BUG_DESC" ]; then
+          echo "mode=by_description"
+          echo "source=manual"
+        else
+          echo "mode=auto"
+          echo "source=backlog"
+        fi
+    output: bug_source
+
+  # 1.2 从 backlog 读取指定 Bug
+  - id: load-bug-by-id
+    name: 从 Backlog 读取指定 Bug
+    condition: "${steps.determine-bug-source.bug_source.mode} == 'by_id'"
+    step: backlog/list
+    input:
+      project_path: "${inputs.project_path}"
+      type: bug
+      filter_id: "${inputs.bug_id}"
+    output:
+      items
+      count
+    checkpoint:
+      verify: count > 0
+      message: "📋 已加载 Bug: ${items[0].title}"
+
+  # 1.3 自动选择最紧急 Bug
+  - id: auto-select-bug
+    name: 自动选择最紧急 Bug
+    condition: "${steps.determine-bug-source.bug_source.mode} == 'auto'"
+    step: backlog/decide
+    input:
+      project_path: "${inputs.project_path}"
+    output:
+      recommendation
+      suggested_workflow
+      reason
+    checkpoint:
+      message: "🎯 自动选择: ${recommendation.title}"
+
+  # 1.4 提取 Bug 信息
+  - id: extract-bug-info
+    name: 提取 Bug 信息
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        MODE="${steps.determine-bug-source.bug_source.mode}"
+        
+        if [ "$MODE" = "by_id" ]; then
+          # 从 load-bug-by-id 获取
+          BUG_TITLE="${steps.load-bug-by-id.items[0].title}"
+          BUG_DESC="${steps.load-bug-by-id.items[0].description:-$BUG_TITLE}"
+          BUG_ERROR="${steps.load-bug-by-id.items[0].error_log:-${inputs.error_log}}"
+          BUG_ID="${inputs.bug_id}"
+        elif [ "$MODE" = "auto" ]; then
+          # 从 auto-select-bug 获取
+          BUG_TITLE="${steps.auto-select-bug.recommendation.title}"
+          BUG_DESC="${steps.auto-select-bug.recommendation.description:-$BUG_TITLE}"
+          BUG_ERROR="${steps.auto-select-bug.recommendation.error_log:-${inputs.error_log}}"
+          BUG_ID="${steps.auto-select-bug.recommendation.id}"
+        else
+          # 手动描述
+          BUG_TITLE="${inputs.bug_description}"
+          BUG_DESC="${inputs.bug_description}"
+          BUG_ERROR="${inputs.error_log}"
+          BUG_ID=""
+        fi
+        
+        echo "bug_id=$BUG_ID"
+        echo "bug_title=$BUG_TITLE"
+        echo "bug_description=$BUG_DESC"
+        echo "error_log=$BUG_ERROR"
+        echo "has_backlog=$([ -n "$BUG_ID" ] && echo 'true' || echo 'false')"
+    output: bug_info
+
+  # ==========================================================================
+  # Phase 2: 诊断问题
+  # ==========================================================================
+  - id: phase-2-diagnose
+    phase: 诊断问题
+  
+  - id: diagnose
+    name: 诊断 Bug
+    step: bugfix/diagnose
+    input:
+      project_path: "${inputs.project_path}"
+      bug_description: "${steps.extract-bug-info.bug_info.bug_description}"
+      error_log: "${steps.extract-bug-info.bug_info.error_log}"
+    output:
+      diagnosis
+    checkpoint:
+      message: "🔍 诊断完成: ${diagnosis.root_cause}"
+
+  # ==========================================================================
+  # Phase 3: 修复问题
+  # ==========================================================================
+  - id: phase-3-fix
+    phase: 修复问题
+  
+  - id: fix
+    name: 修复 Bug
+    step: bugfix/fix
+    input:
+      project_path: "${inputs.project_path}"
+      diagnosis: "${steps.diagnose.diagnosis}"
+      bug_description: "${steps.extract-bug-info.bug_info.bug_description}"
+    output:
+      fix_result
+    checkpoint:
+      message: "🔧 修复完成"
+
+  # ==========================================================================
+  # Phase 4: 验证修复
+  # ==========================================================================
+  - id: phase-4-verify
+    phase: 验证修复
+  
+  - id: verify
+    name: 验证修复
+    step: bugfix/verify
+    input:
+      project_path: "${inputs.project_path}"
+      diagnosis: "${steps.diagnose.diagnosis}"
+      fix_result: "${steps.fix.fix_result}"
+    output:
+      verify_result
+    checkpoint:
+      verify: verify_result.passed == true
+      message: "✅ 验证通过"
+
+  # ==========================================================================
+  # Phase 5: Git 提交
+  # ==========================================================================
+  - id: git-commit
+    name: Git 提交
+    execute:
+      type: builtin
+      handler: git-commit
+    input:
+      message: "fix: ${steps.extract-bug-info.bug_info.bug_title}"
+    output:
+      commit_result
+
+  # ==========================================================================
+  # Phase 6: 标记解决
+  # ==========================================================================
+  - id: phase-6-resolve
+    phase: 标记解决
+  
+  - id: resolve-in-backlog
+    name: 在 Backlog 标记解决
+    condition: "${inputs.auto_resolve} == true and ${steps.extract-bug-info.bug_info.has_backlog} == true"
+    step: backlog/resolve
+    input:
+      project_path: "${inputs.project_path}"
+      item_id: "${steps.extract-bug-info.bug_info.bug_id}"
+      resolution: "Fixed by wf-bugfix. Commit: ${steps.git-commit.commit_result.commit}"
+    output:
+      item
+    checkpoint:
+      message: "📋 已标记解决: ${item.id}"
+
+  # ==========================================================================
+  # 完成通知
+  # ==========================================================================
+  - id: notify-complete
+    tool: notification/notify
+    input:
+      channel: discord
+      message: |
+        🐛 Bug 修复完成
+        
+        📋 Bug: ${steps.extract-bug-info.bug_info.bug_title}
+        🔍 根因: ${steps.diagnose.diagnosis.root_cause}
+        ✅ 验证: 通过
+        ${steps.extract-bug-info.bug_info.has_backlog == 'true' ? '📋 已标记解决: ' + steps.extract-bug-info.bug_info.bug_id : ''}
+
+# 输出
+outputs:
+  - name: bug_id
+    type: string
+    description: Bug ID（如果有）
+  
+  - name: bug_title
+    type: string
+    description: Bug 标题
+  
+  - name: diagnosis
+    type: object
+    description: 诊断结果
+  
+  - name: fix_result
+    type: object
+    description: 修复结果
+  
+  - name: verify_result
+    type: object
+    description: 验证结果
+  
+  - name: resolved
+    type: boolean
+    description: 是否已标记解决
+
+# 错误处理
+error_handling:
+  - error: BUG_NOT_FOUND
+    action: abort
+    message: "未找到指定的 Bug ID"
+  
+  - error: NO_OPEN_BUGS
+    action: abort
+    message: "Backlog 中没有 open 状态的 Bug"
+  
+  - error: VERIFICATION_FAILED
+    action: retry
+    max_retries: 2
+    message: "验证失败，自动重试"
+
+# 执行配置
+config:
+  ironLaws: true
+  runTests: true
+  defaultAgent: codex
+  timeout: 300000  # 5 分钟
+
+# 重试配置
+retry:
+  maxAttempts: 2
+  backoff: fixed
+  initialDelay: 5000
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 2.0.0
+  tags:
+    - bugfix
+    - backlog
+    - lightweight
+  changelog:
+    - version: 2.0.0
+      date: 2026-04-06
+      changes:
+        - 支持从 backlog.yml 读取 Bug
+        - 支持 bug_id 输入
+        - 自动选择最紧急 Bug
+        - 完成后调用 backlog/resolve
+    - version: 1.0.0
+      date: 2026-04-02
+      changes:
+        - 初始版本

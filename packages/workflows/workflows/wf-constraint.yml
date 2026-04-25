@@ -1,0 +1,261 @@
+# wf-constraint.yml - Long-Running Agents 约束检查工作流
+# ============================================================================
+# 工作流类型: 验证
+# 触发方式: /wf-constraint <project_path> [--level iron_law|guideline|tip]
+# 用途: 检查项目是否符合 Long-Running Agents 约束
+#
+# Long-Running Agents 铁律:
+# 1. 实现功能前必须先拆解为可验证的子任务（passes）
+# 2. 功能完成必须有端到端测试验证
+# 3. 跨 session 进度追踪（progress.json）
+# ============================================================================
+
+id: wf-constraint
+stage: govern
+name: Long-Running Agents 约束检查
+description: |
+  独立的约束检查工作流，用于验证项目是否符合 Long-Running Agents 规范。
+  
+  **约束内容**：
+  - feature_list.json 存在性和格式
+  - 功能拆解（每个功能有 passes）
+  - progress.json 进度追踪
+  
+  **约束级别**：
+  - iron_law: 违反时必须停止
+  - guideline: 违反时警告
+  - tip: 仅提示
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 项目开始前检查是否准备好
+  - 开发中途检查是否违反约束
+  - 发布前检查是否通过所有约束
+  - 作为 wf-full/wf-dev 的子工作流调用
+  
+  ⚠️ **不适合**：
+  - 代码审查 → 用 wf-review
+  - 项目验证 → 用 wf-validate
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🔍"
+  keywords: [约束, 检查, 铁律, Long-Running, feature_list, progress]
+  examples:
+    - input: "/wf-constraint /root/projects/my-app"
+      output: "检查 feature_list、功能拆解、progress"
+    - input: "/wf-constraint . --level iron_law"
+      output: "严格检查，违反时停止"
+    - input: "/wf-constraint . --quick"
+      output: "快速检查（只检查关键项）"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: constraint_level
+    type: string
+    required: false
+    default: guideline
+    enum: [iron_law, guideline, tip]
+    description: |
+      约束级别：
+      - iron_law: 违反时必须停止
+      - guideline: 违反时警告
+      - tip: 仅提示
+  
+  - name: checks
+    type: array
+    required: false
+    description: |
+      要执行的检查项（不指定则全部）：
+      - feature_list: 检查 feature_list.json
+      - decomposition: 检查功能拆解
+      - progress: 检查 progress.json
+  
+  - name: quick
+    type: boolean
+    required: false
+    default: false
+    description: 快速模式（只检查关键项：feature_list + decomposition）
+  
+  - name: output_format
+    type: string
+    required: false
+    default: summary
+    enum: [summary, detailed, json]
+    description: 报告输出格式
+  
+  - name: save_report
+    type: boolean
+    required: false
+    default: true
+    description: 是否保存报告到项目目录
+
+# 阶段定义
+phases:
+  - id: checks
+    name: 约束检查
+    parallel: false
+  - id: summary
+    name: 汇总报告
+    parallel: false
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 约束检查
+  # ==========================================================================
+  - id: phase-1-checks
+    phase: 约束检查
+  
+  # 1.1 确定检查项
+  - id: set-checks
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        # 确定要执行的检查项
+        if [ -n "${inputs.checks}" ]; then
+          # 用户指定了检查项
+          echo "selected_checks=${inputs.checks}"
+        elif [ "${inputs.quick}" = "true" ]; then
+          # 快速模式
+          echo 'selected_checks=["feature_list", "decomposition"]'
+        else
+          # 默认全部
+          echo 'selected_checks=["feature_list", "decomposition", "progress"]'
+        fi
+    output: checks_config
+  
+  # 1.2 检查 feature_list.json
+  - id: check-feature-list
+    condition: "'feature_list' in steps.set-checks.selected_checks"
+    step: constraint/check-feature-list
+    input:
+      project_path: "${inputs.project_path}"
+      strict: "${inputs.constraint_level == 'iron_law'}"
+    on_fail: continue
+    output: feature_list_result
+  
+  # 1.3 检查功能拆解
+  - id: check-decomposition
+    condition: "'decomposition' in steps.set-checks.selected_checks"
+    step: constraint/check-decomposition
+    input:
+      project_path: "${inputs.project_path}"
+      constraint_level: "${inputs.constraint_level}"
+      exceptions: [trivial_change, bug_fix_only, internal_refactor]
+    on_fail: continue
+    output: decomposition_result
+  
+  # 1.4 检查 progress.json
+  - id: check-progress
+    condition: "'progress' in steps.set-checks.selected_checks"
+    step: constraint/check-progress
+    input:
+      project_path: "${inputs.project_path}"
+      require_passes_evidence: true
+    on_fail: continue
+    output: progress_result
+  
+  # ==========================================================================
+  # Phase 2: 汇总报告
+  # ==========================================================================
+  - id: phase-2-summary
+    phase: 汇总报告
+  
+  # 2.1 生成报告
+  - id: generate-report
+    step: constraint/generate-report
+    input:
+      project_path: "${inputs.project_path}"
+      constraint_level: "${inputs.constraint_level}"
+      feature_list_result: "${steps.check-feature-list.output}"
+      decomposition_result: "${steps.check-decomposition.output}"
+      progress_result: "${steps.check-progress.output}"
+      output_format: "${inputs.output_format}"
+    output: report_result
+  
+  # 2.2 保存报告
+  - id: save-report
+    condition: "${inputs.save_report} == true"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        REPORT_FILE="$PROJECT_PATH/.constraint-report.json"
+        
+        # 保存报告
+        echo '${steps.generate-report.report}' > "$REPORT_FILE"
+        echo "📝 报告已保存到: $REPORT_FILE"
+  
+  # 2.3 输出结果
+  - id: output-result
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+        echo "  🔍 Long-Running Agents 约束检查完成"
+        echo "═══════════════════════════════════════════════════════════"
+        echo ""
+        echo "项目路径: ${inputs.project_path}"
+        echo "约束级别: ${inputs.constraint_level}"
+        echo ""
+        echo "结果: ${steps.generate-report.passed == true ? '✅ 通过' : '❌ 失败'}"
+        echo "检查项: ${steps.generate-report.passed_checks}/${steps.generate-report.total_checks}"
+        echo ""
+        if [ -n "${steps.generate-report.violations}" ]; then
+          echo "违规项:"
+          echo "${steps.generate-report.violations}" | jq -r '.[] | "  - " + .'
+        fi
+        echo "═══════════════════════════════════════════════════════════"
+
+# 输出
+outputs:
+  - name: passed
+    type: boolean
+    description: 是否通过所有约束
+  
+  - name: total_checks
+    type: number
+    description: 总检查项数
+  
+  - name: passed_checks
+    type: number
+    description: 通过的检查项数
+  
+  - name: violations
+    type: array
+    description: 违规项列表
+  
+  - name: report
+    type: object
+    description: 详细报告
+
+# 错误处理
+error_handling:
+  - error: CONSTRAINT_VIOLATION
+    action: "${inputs.constraint_level == 'iron_law' ? 'abort' : 'warn'}"
+    message: "约束违规：${error.constraint_id}"
+  
+  - error: FEATURE_LIST_NOT_FOUND
+    action: warn
+    message: "未找到 feature_list.json"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags:
+    - constraint
+    - validation
+    - long-running

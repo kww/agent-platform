@@ -1,0 +1,90 @@
+# test-execute-phases-mock.yml - 模拟分批开发流程
+id: test-execute-phases-mock
+stage: develop
+name: 模拟分批开发流程
+description: 测试 wf-execute-phases 核心流程（不调用 Agent）
+version: 1.0.0
+
+inputs:
+  - name: project_path
+    type: string
+    default: /root/projects/outputs/split-batch-test
+
+steps:
+  # ========================================
+  # Phase 1: 加载与分批
+  # ========================================
+  - id: load-tasks
+    step: planning/load-tasks
+    input:
+      path: "${inputs.project_path}/tasks.yml"
+    output: tasks_data
+  
+  - id: split-batch
+    step: planning/split-batch
+    input:
+      tasks: "${steps.load-tasks.tasks}"
+      batch_size: 2
+      strategy: balanced
+    output: split_result
+  
+  # ========================================
+  # Phase 2: 分批执行（模拟）
+  # ========================================
+  - id: execute-batches
+    type: batch-iterator
+    source: "${steps.split-batch.batches}"
+    batch_var: current_batch
+    index_var: batch_index
+    output: batch_results
+    
+    steps:
+      # 批次通知
+      - id: notify-batch
+        type: notification
+        message: |
+          📦 批次 ${batch_index + 1}/${steps.split-batch.total_batches}
+          任务: ${current_batch.map(t => t.name).join(', ')}
+      
+      # 模拟 review（使用 builtin）
+      - id: mock-review
+        type: notification
+        message: |
+          🔍 审查批次 ${batch_index + 1}
+          状态: 模拟通过
+      
+      # 模拟 fix 循环（仅当需要时）
+      - id: fix-cycle
+        condition: "false"  # 模拟不需要修复
+        type: notification
+        message: "修复中..."
+
+  # ========================================
+  # Phase 3: 汇总结果
+  # ========================================
+  - id: aggregate-results
+    type: aggregator
+    output: summary
+    aggregate:
+      source: "${steps.execute-batches.batch_results}"
+      operations:
+        - name: total_batches
+          type: count
+        - name: completed
+          type: count_where
+          condition: "item.status == 'completed'"
+  
+  - id: final-report
+    type: notification
+    message: |
+      🎉 分批开发流程完成
+      
+      📊 统计：
+      - 总任务: ${steps.load-tasks.tasks_data.tasks.length}
+      - 批次数: ${steps.split-batch.total_batches}
+      - 策略: ${steps.split-batch.execution_plan.strategy}
+
+outputs:
+  - split_result
+  - batch_results
+  - summary

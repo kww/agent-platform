@@ -1,0 +1,87 @@
+# wf-quick - L1 轻量工作流
+#
+# 用途：小功能、原型、POC 开发
+# 特点：轻量验证，快速迭代
+#
+# 调用方式：
+#   POST /api/execute
+#   {
+#     "workflowId": "wf-quick",
+#     "inputs": {
+#       "project_path": "/path/to/project",
+#       "feature_description": "添加一个健康检查 API 端点"
+#     }
+#   }
+
+id: wf-quick
+stage: develop
+name: Quick Feature
+description: L1 轻量工作流 - 小功能/原型开发，轻量验证
+category: development
+emoji: "⚡"
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 小功能开发（1-3 个文件）
+  - 原型/POC 开发
+  - 简单 API 端点
+  - 快速验证想法
+  
+  ⚠️ **不适合**：
+  - 文案修改 → 用 wf-patch
+  - Bug 修复 → 用 wf-bugfix
+  - 大型功能 → 用 wf-iterate
+
+steps:
+  # Step 1: 分析需求
+  - id: analyze
+    step: quick/analyze
+    input:
+      project_path: "{{project_path}}"
+      feature_description: "{{feature_description}}"
+    output: analysis
+
+  # Step 2: 实现功能
+  - id: implement
+    step: quick/implement
+    input:
+      project_path: "{{project_path}}"
+      analysis: "{{analysis}}"
+      feature_description: "{{feature_description}}"
+    output: implementation
+
+  # Step 3: 验证功能
+  - id: verify
+    step: quick/verify
+    input:
+      project_path: "{{project_path}}"
+      analysis: "{{analysis}}"
+      implementation: "{{implementation}}"
+    output: verify_result
+
+  # Step 4: Git 提交
+  - id: commit
+    execute:
+      type: builtin
+      handler: git-commit
+    input:
+      message: "feat: {{feature_description}}"
+    output: commit_result
+
+# 执行配置
+config:
+  # Iron Laws 检查
+  ironLaws: true
+  # 运行测试
+  runTests: true
+  # 默认 Agent
+  defaultAgent: codex
+  # 超时设置
+  timeout: 300000  # 5 分钟
+
+# 重试配置
+retry:
+  maxAttempts: 2
+  backoff: fixed
+  initialDelay: 5000

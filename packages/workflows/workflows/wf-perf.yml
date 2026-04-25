@@ -1,0 +1,106 @@
+# wf-perf.yml - 性能优化工作流
+# ============================================================================
+# 工作流类型: 性能优化
+# 触发方式: /wf-perf [--target frontend|backend|database] [--baseline <file>]
+# 核心理念: 测量 → 分析 → 优化 → 验证
+#
+# 流程：
+#   1. 建立基线（可选）
+#   2. 性能分析
+#   3. 识别瓶颈
+#   4. 实施优化
+#   5. 验证效果
+# ============================================================================
+
+id: wf-perf
+stage: develop
+name: 性能优化工作流
+description: |
+  系统化性能优化流程
+  
+  触发方式：
+  - 手动触发：/wf-perf --target <frontend|backend|database>
+  - 基线对比：/wf-perf --baseline <baseline-file>
+  
+  优化目标：
+  - frontend: 前端性能优化
+  - backend: 后端性能优化
+  - database: 数据库性能优化
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 页面加载慢
+  - API 响应慢
+  - 数据库查询慢
+  - 内存占用高
+  
+  ⚠️ **前置条件**：
+  - 有明确的性能问题
+  - 有性能基线（可选）
+
+# 阶段定义
+phases:
+  - id: measure
+    name: 测量基线
+    description: 建立性能基线，明确优化目标
+    steps:
+      - step: analysis/analyze-code
+        params:
+          analysis_type: performance
+      - step: quality/check-complexity
+        params:
+          threshold: 15
+
+  - id: analyze
+    name: 分析瓶颈
+    description: 识别性能瓶颈和优化机会
+    steps:
+      - step: analysis/analyze-perf
+        params:
+          baseline: "{{baseline}}"
+      - step: governance/define-stance
+        params:
+          stance: performance
+
+  - id: optimize
+    name: 实施优化
+    description: 根据分析结果实施优化
+    parallel: true
+    steps:
+      - step: development/refactor-code
+        condition: "优化类型 == 代码"
+        params:
+          focus: performance
+      - step: development/optimize-query
+        condition: "优化类型 == 数据库"
+        params:
+          slow_query_threshold: 100ms
+
+  - id: verify
+    name: 验证效果
+    description: 验证优化效果
+    steps:
+      - step: testing/run-tests
+        params:
+          type: performance
+      - step: validation/verify-benchmark
+        params:
+          baseline: "{{baseline}}"
+          improvement_threshold: 10%
+
+# 默认参数
+defaults:
+  target: backend
+  baseline: null
+  improvement_threshold: 10
+
+# 超时设置
+timeout: 1800  # 30 分钟
+
+# 重试策略
+retry:
+  max_retries: 2
+  retry_on:
+    - timeout
+    - agent_error

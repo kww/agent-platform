@@ -1,0 +1,495 @@
+# wf-dev.yml - 统一开发工作流（入口文件）
+# ============================================================================
+# 工作流类型: 开发执行
+# 触发方式: /wf-dev <project_path> [feature_id|requirement]
+# 版本: 5.0.0 - 模式拆分重构
+# ============================================================================
+#
+# 模式选择（自动判断）：
+# - 有 feature_id → backlog 模式（从 backlog.yml 读取，完成后标记）
+# - 有 requirement → iterate 模式（分析+生成增量任务）
+# - 有 tasks.yml → execute 模式（直接执行任务清单）
+# - 任务数 > 10 → 自动启用 batch 模式
+#
+# 架构说明：
+# - 入口文件（本文件）：判断模式 + 调用对应步骤
+# - 步骤文件：steps/wf-dev/*.yml（模式特有 + 共享核心）
+#
+# 步骤文件清单：
+# - entry.yml: 入口判断
+# - backlog-load.yml: Backlog 模式加载
+# - backlog-resolve.yml: Backlog 模式标记解决
+# - iterate-analyze.yml: Iterate 模式分析
+# - iterate-generate.yml: Iterate 模式生成任务
+# - execute-load.yml: Execute 模式加载任务
+# - core-execute.yml: 共享核心执行
+# - core-verify.yml: 共享核心验证
+# - core-summary.yml: 共享核心汇总
+# ============================================================================
+
+id: wf-dev
+stage: develop
+name: 开发工作流
+description: |
+  统一开发工作流，支持四种模式 + 约束检查 + E2E 测试
+  
+  **模式自动判断**：
+  1. feature_id → backlog 模式
+  2. requirement → iterate 模式  
+  3. tasks.yml → execute 模式
+
+usageScenario: |
+  🎯 **适合场景**：
+  - 有 feature_id，从 backlog 读取 → backlog 模式
+  - 已有 tasks.yml，按计划执行 → execute 模式
+  - 在已有项目上添加新功能 → iterate 模式
+  
+  ⚠️ **不适合**：
+  - 新项目从零开始 → 用 wf-full
+  - 小功能/原型 → 用 wf-quick
+  - Bug 修复 → 用 wf-bugfix
+
+openclaw:
+  userInvocable: true
+  emoji: "🚀"
+  keywords: [开发, 任务, 执行, 迭代, backlog, feature]
+  examples:
+    - input: "/wf-dev /root/projects/my-app --feature_id FEAT-001"
+      output: "backlog 模式：从 backlog 读取 FEAT-001"
+    - input: "/wf-dev /root/projects/my-app --requirement '添加登录'"
+      output: "iterate 模式：分析代码 → 生成任务"
+    - input: "/wf-dev /root/projects/my-app"
+      output: "execute 模式：执行 tasks.yml"
+    - input: "/wf-dev /root/projects/my-app --batch-strategy priority_first --batch-preset urgent_critical"
+      output: "紧急模式：高优先级任务优先执行"
+    - input: "/wf-dev /root/projects/my-app --batch-strategy fast_first --batch-preset mvp_fast"
+      output: "MVP 模式：短时间任务优先，快速产出"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: feature_id
+    type: string
+    required: false
+    description: Feature ID（backlog 模式）
+  
+  - name: requirement
+    type: string
+    required: false
+    description: 需求描述（iterate 模式）
+  
+  - name: mode
+    type: string
+    required: false
+    default: auto
+    enum: [auto, backlog, execute, iterate]
+    description: 执行模式（auto 自动判断）
+  
+  - name: auto_resolve
+    type: boolean
+    required: false
+    default: true
+    description: 自动标记解决（backlog 模式）
+  
+  - name: batch_size
+    type: number
+    required: false
+    default: 3
+    description: 每批次任务数
+  
+  - name: enable_review
+    type: boolean
+    required: false
+    default: true
+    description: 启用代码审查
+  
+  - name: enable_constraints
+    type: boolean
+    required: false
+    default: false
+    description: 启用 Long-Running 约束检查
+  
+  - name: constraint_level
+    type: string
+    required: false
+    default: guideline
+    enum: [iron_law, guideline, tip]
+    description: |
+      约束级别：
+      - iron_law: 违反时必须停止
+      - guideline: 违反时警告
+      - tip: 仅提示
+  
+  - name: enable_e2e
+    type: boolean
+    required: false
+    default: false
+    description: 启用 E2E 测试
+  
+  - name: sync_github
+    type: boolean
+    required: false
+    default: false
+    description: 同步到 GitHub Issues（完成后调用 github-sync）
+  
+  - name: github_sync_direction
+    type: string
+    required: false
+    default: to_github
+    enum: [to_github, from_github, bidirectional]
+    description: GitHub 同步方向
+  
+  # 分批策略参数（v5.2.0 AW-021）
+  - name: batch_strategy
+    type: string
+    required: false
+    default: balanced
+    enum: [sequential, parallel, balanced, priority_first, risk_first, value_first, fast_first, dependency_priority, smart]
+    description: |
+      任务分批策略：
+      - sequential: 严格串行
+      - parallel: 尽可能并行
+      - balanced: 依赖平衡（默认）
+      - priority_first: 优先级优先
+      - risk_first: 风险优先
+      - value_first: 价值优先
+      - fast_first: 快速产出
+      - dependency_priority: 依赖+优先级综合（推荐）
+      - smart: AI 智能分析
+  
+  - name: batch_preset
+    type: string
+    required: false
+    default: default
+    enum: [default, mvp_fast, urgent_critical, explore_new, balanced]
+    description: |
+      场景预设配置：
+      - default: 默认均衡
+      - mvp_fast: MVP 快速产出
+      - urgent_critical: 紧急项目
+      - explore_new: 新技术探索
+      - balanced: 稳定迭代
+  
+  - name: batch_weights
+    type: object
+    required: false
+    description: 自定义权重配置（覆盖 preset）
+
+# 阶段定义
+phases:
+  - id: entry
+    name: 入口判断
+  - id: load
+    name: 加载阶段
+  - id: constraint
+    name: 约束检查
+  - id: execute
+    name: 执行阶段
+  - id: verify
+    name: 验证阶段
+  - id: summary
+    name: 汇总阶段
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 入口判断
+  # ==========================================================================
+  - id: phase-1-entry
+    phase: 入口判断
+  
+  - id: determine-mode
+    name: 判断执行模式
+    step: wf-dev/entry
+    input:
+      project_path: "${inputs.project_path}"
+      feature_id: "${inputs.feature_id}"
+      requirement: "${inputs.requirement}"
+      mode: "${inputs.mode}"
+    output:
+      determined_mode
+      has_feature_id
+  
+  # ==========================================================================
+  # Phase 2: 加载阶段
+  # ==========================================================================
+  - id: phase-2-load
+    phase: 加载阶段
+  
+  # Backlog 模式：加载 Feature
+  - id: load-feature
+    name: 加载 Feature
+    condition: "${steps.determine-mode.determined_mode} == 'backlog'"
+    step: wf-dev/backlog-load
+    input:
+      project_path: "${inputs.project_path}"
+      feature_id: "${inputs.feature_id}"
+    output:
+      feature
+      feature_title
+      feature_description
+    checkpoint:
+      message: "📋 Feature: ${feature_title}"
+  
+  # Iterate 模式：分析代码库
+  - id: analyze-codebase
+    name: 分析代码库
+    condition: "${steps.determine-mode.determined_mode} == 'iterate'"
+    step: wf-dev/iterate-analyze
+    input:
+      project_path: "${inputs.project_path}"
+      requirement: "${inputs.requirement}"
+    output:
+      analysis
+      tech_stack
+      modules
+    checkpoint:
+      message: "📊 代码库分析完成"
+  
+  # Iterate 模式：生成增量任务
+  - id: generate-tasks
+    name: 生成增量任务
+    condition: "${steps.determine-mode.determined_mode} == 'iterate'"
+    step: wf-dev/iterate-generate
+    input:
+      project_path: "${inputs.project_path}"
+      requirement: "${inputs.requirement}"
+      analysis: "${steps.analyze-codebase.analysis}"
+    output:
+      tasks_path
+      task_count
+      tasks
+    checkpoint:
+      message: "📋 生成 ${task_count} 个任务"
+  
+  # Execute 模式：加载任务清单
+  - id: load-tasks
+    name: 加载任务清单
+    condition: "${steps.determine-mode.determined_mode} == 'execute'"
+    step: wf-dev/execute-load
+    input:
+      project_path: "${inputs.project_path}"
+    output:
+      project
+      tasks
+      task_count
+    checkpoint:
+      message: "📋 加载 ${task_count} 个任务"
+  
+  # ==========================================================================
+  # Phase 2.5: 约束检查（Long-Running Agents）
+  # ==========================================================================
+  - id: phase-2.5-constraint
+    phase: 约束检查
+  
+  # 调用独立约束检查工作流
+  - id: constraint-check
+    condition: "${inputs.enable_constraints} == true"
+    step: wf-constraint
+    input:
+      project_path: "${inputs.project_path}"
+      constraint_level: "${inputs.constraint_level || 'guideline'}"
+      quick: true
+      output_format: summary
+    on_fail: continue
+    output: constraint_result
+  
+  # 约束检查失败处理
+  - id: constraint-check-failed
+    condition: "${inputs.enable_constraints} == true and ${steps.constraint-check.passed} == false"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        CONSTRAINT_LEVEL="${inputs.constraint_level || 'guideline'}"
+        
+        if [ "$CONSTRAINT_LEVEL" = "iron_law" ]; then
+          echo "❌ 违反铁律约束，工作流终止"
+          echo "违规项: ${steps.constraint-check.violations}"
+          exit 1
+        else
+          echo "⚠️ 违反指导原则，继续执行"
+          echo "违规项: ${steps.constraint-check.violations}"
+        fi
+    output: constraint_decision
+
+  # ==========================================================================
+  # Phase 3: 执行阶段
+  # ==========================================================================
+  - id: phase-3-execute
+    phase: 执行阶段
+  
+  - id: execute-tasks
+    name: 执行任务
+    step: wf-dev/core-execute
+    input:
+      project_path: "${inputs.project_path}"
+      tasks: "${steps.load-tasks.tasks || steps.generate-tasks.tasks}"
+      batch_mode: "${(steps.load-tasks.task_count || steps.generate-tasks.task_count) > 10}"
+      batch_size: "${inputs.batch_size}"
+      enable_review: "${inputs.enable_review}"
+    output:
+      results
+      completed_count
+      failed_count
+      all_passed
+    checkpoint:
+      message: "✅ 执行完成 ${completed_count} 个任务"
+  
+  # ==========================================================================
+  # Phase 4: 验证阶段
+  # ==========================================================================
+  - id: phase-4-verify
+    phase: 验证阶段
+  
+  - id: verify-results
+    name: 验证结果
+    step: wf-dev/core-verify
+    input:
+      project_path: "${inputs.project_path}"
+      execution_results: "${steps.execute-tasks.results}"
+      enable_review: "${inputs.enable_review}"
+    output:
+      test_result
+      review_result
+      all_passed
+    checkpoint:
+      message: "✅ 验证通过"
+  
+  # ==========================================================================
+  # Phase 5: 汇总阶段
+  # ==========================================================================
+  - id: phase-5-summary
+    phase: 汇总阶段
+  
+  - id: generate-summary
+    name: 生成汇总
+    step: wf-dev/core-summary
+    input:
+      project_path: "${inputs.project_path}"
+      mode: "${steps.determine-mode.determined_mode}"
+      feature_id: "${inputs.feature_id}"
+      execution_results: "${steps.execute-tasks.results}"
+      test_result: "${steps.verify-results.test_result}"
+      review_result: "${steps.verify-results.review_result}"
+    output:
+      completion_report
+      summary
+  
+  # Backlog 模式：标记解决
+  - id: resolve-feature
+    name: 标记 Feature 解决
+    condition: "${steps.determine-mode.determined_mode} == 'backlog'"
+    step: wf-dev/backlog-resolve
+    input:
+      project_path: "${inputs.project_path}"
+      feature_id: "${inputs.feature_id}"
+      auto_resolve: "${inputs.auto_resolve}"
+      execution_mode: "${steps.determine-mode.determined_mode}"
+    output:
+      resolved
+      item
+    checkpoint:
+      message: "📋 已标记解决: ${inputs.feature_id}"
+  
+  # GitHub Issues 同步（可选）
+  - id: github-sync
+    name: GitHub Issues 同步
+    condition: "${inputs.sync_github} == true && ${steps.resolve-item.resolved} == true"
+    step: backlog/github-sync
+    input:
+      project_path: "${inputs.project_path}"
+      direction: "${inputs.github_sync_direction}"
+      conflict_strategy: "layered"
+    output:
+      sync_result
+      conflicts
+    checkpoint:
+      message: "📤 已同步到 GitHub Issues"
+
+# 输出
+outputs:
+  - name: mode
+    type: string
+    description: 执行模式
+  
+  - name: feature_id
+    type: string
+    description: Feature ID
+  
+  - name: feature_resolved
+    type: boolean
+    description: 是否已标记解决
+  
+  - name: completion_report
+    type: file
+    description: 完成报告
+  
+  - name: test_result
+    type: object
+    description: 测试结果
+  
+  - name: review_result
+    type: object
+    description: 审查结果
+  
+  - name: github_sync_result
+    type: object
+    description: GitHub 同步结果（如启用）
+
+# 错误处理
+error_handling:
+  - error: TASK_FAILED
+    action: pause
+    message: "任务失败"
+  
+  - error: TEST_FAILED
+    action: retry
+    max_retries: 3
+    message: "测试失败，重试"
+  
+  - error: FEATURE_NOT_FOUND
+    action: abort
+    message: "Feature 不存在"
+
+# 并发控制
+concurrency:
+  max_parallel_tasks: 5
+  timeout_per_task: 30m
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 5.2.0
+  tags: [development, execution, iteration, backlog]
+  changelog:
+    - version: 5.2.0
+      date: 2026-04-07
+      changes:
+        - 新增分批策略参数（batch_strategy/batch_preset/batch_weights）
+        - 支持 9 种分批策略
+        - 支持 5 种场景预设
+        - 支持自定义权重配置
+        - AW-021 多因素优先级排序
+    - version: 5.1.0
+      date: 2026-04-07
+      changes:
+        - 新增 GitHub Issues 同步支持（--sync-github）
+        - 新增 sync_github 和 github_sync_direction 参数
+        - 完成后自动同步到 GitHub Issues
+    - version: 5.0.0
+      date: 2026-04-06
+      changes:
+        - 重构：模式拆分为独立步骤文件
+        - 入口文件精简：1032 → ~250 行
+        - 新增步骤文件：steps/wf-dev/*.yml
+        - 共享核心：core-execute, core-verify, core-summary
+    - version: 4.0.0
+      date: 2026-04-06
+      changes:
+        - 新增 Backlog 集成
+        - 新增 feature_id 支持

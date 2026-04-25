@@ -1,0 +1,93 @@
+# wf-dev/iterate-analyze.yml - Iterate 模式：分析代码库
+# ============================================================================
+# 用途：分析现有代码库，理解项目结构
+# 输入：project_path, requirement
+# 输出：代码库分析结果
+# ============================================================================
+
+id: wf-dev/iterate-analyze
+stage: plan
+name: 分析代码库
+description: |
+  分析现有代码库，为迭代开发做准备
+  
+  输出：
+  - 项目结构
+  - 技术栈
+  - 模块划分
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  requirement:
+    type: string
+    description: 新功能需求
+    required: true
+
+# 输出
+outputs:
+  - name: analysis
+    type: object
+    description: 分析结果
+  
+  - name: tech_stack
+    type: array
+    description: 技术栈
+  
+  - name: modules
+    type: array
+    description: 模块列表
+  
+  - name: analysis_report
+    type: string
+    description: 分析报告路径
+
+# 执行逻辑
+execute:
+  type: script
+  script: |
+    #!/bin/bash
+    set -e
+    
+    PROJECT_PATH="${inputs.project_path}"
+    REQUIREMENT="${inputs.requirement}"
+    
+    echo "🔍 分析代码库..."
+    echo ""
+    
+    # 检查项目是否存在
+    if [ ! -d "$PROJECT_PATH" ]; then
+      echo "⚠️ 项目目录不存在，使用默认分析"
+      echo "tech_stack=unknown"
+      echo "modules=[]"
+      echo "analysis={}"
+      exit 0
+    fi
+    
+    # 简单分析（检查技术栈）
+    TECH_STACK=""
+    if [ -f "$PROJECT_PATH/package.json" ]; then
+      TECH_STACK="nodejs"
+    elif [ -f "$PROJECT_PATH/requirements.txt" ]; then
+      TECH_STACK="python"
+    elif [ -f "$PROJECT_PATH/go.mod" ]; then
+      TECH_STACK="go"
+    else
+      TECH_STACK="unknown"
+    fi
+    
+    echo "tech_stack=$TECH_STACK"
+    echo "modules=[]"
+    echo "analysis={'tech_stack':'$TECH_STACK','requirement':'$REQUIREMENT'}"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, iterate, analyze]

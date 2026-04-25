@@ -1,0 +1,55 @@
+# test-batch-iterator.yml - 测试批次迭代执行
+id: test-batch-iterator
+stage: develop
+name: 测试批次迭代
+description: 测试 batch-iterator 执行类型
+version: 1.0.0
+
+inputs:
+  - name: project_path
+    type: string
+    default: /root/projects/outputs/split-batch-test
+
+steps:
+  # 加载任务
+  - id: load-tasks
+    step: planning/load-tasks
+    input:
+      project_path: "${inputs.project_path}"
+    output: tasks_data
+  
+  # 分批
+  - id: split-batch
+    step: planning/split-batch
+    input:
+      tasks: "${steps.load-tasks.tasks_data.tasks}"
+      batch_size: 2
+      strategy: balanced
+    output: split_result
+  
+  # 批次迭代执行
+  - id: execute-batches
+    type: batch-iterator
+    source: "${steps.split-batch.batches}"
+    batch_var: current_batch
+    index_var: batch_index
+    output: batch_results
+    
+    steps:
+      # 每个批次的通知
+      - id: notify-batch-start
+        type: notification
+        message: |
+          📦 批次 ${batch_index + 1} 开始执行
+          任务: ${current_batch.map(t => t.name).join(', ')}
+      
+      # 模拟批次处理（输出任务列表）
+      - id: process-batch
+        step: planning/load-tasks
+        input:
+          project_path: "${inputs.project_path}"
+        output: batch_output
+
+outputs:
+  - split_result
+  - batch_results

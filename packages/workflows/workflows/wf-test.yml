@@ -1,0 +1,158 @@
+# wf-test.yml - 测试回归流程（智能版本）
+# ============================================================================
+# 工作流类型: 测试验证
+# 触发方式: /wf-test
+# Superpowers 整合: ✅ verify + review
+#   - verification-before-completion
+#   - requesting-code-review
+#
+# 智能特性（v2.0）:
+#   - fingerprint 集成：智能检测变更级别
+#   - STRUCTURAL → 完整测试套件
+#   - COSMETIC → 快速测试
+#   - NONE → 跳过测试
+# ============================================================================
+
+id: wf-test
+stage: verify
+name: 测试回归流程
+description: |
+  运行测试验证代码，支持代码审查。
+  
+  智能特性：
+  - 自动检测变更级别（fingerprint）
+  - 结构性变更 → 完整测试套件
+  - 表面变更 → 快速测试
+  - 无变更 → 跳过测试
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 运行测试套件验证代码
+  - 代码审查和质量检查
+  - 回归测试
+  - 发布前验证
+  
+  ⚠️ **不适合**：
+  - 开发新功能 → 用 wf-iterate
+  - Bug 修复 → 用 wf-bugfix
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🧪"
+  keywords: [测试, 验证, 回归, 智能测试]
+
+# Superpowers 整合
+superpowers:
+  - verification-before-completion
+  - requesting-code-review
+
+# 未整合原因
+not_integrated:
+  brainstorming: "测试阶段不需要头脑风暴"
+  writing-plans: "测试阶段不需要计划编写"
+  using-git-worktrees: "测试在已有代码基础上进行"
+  subagent-driven-development: "测试通常单人完成"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: requirement
+    type: string
+    required: false
+    description: 测试需求（可选）
+  
+  - name: enable_review
+    type: boolean
+    required: false
+    description: 是否启用代码审查
+    default: false
+  
+  - name: compare_with
+    type: string
+    required: false
+    default: "previous"
+    description: |
+      对比目标（用于智能测试）：
+      - "previous" - 与上一个 commit 对比
+      - "base" - 与基准分支对比
+      - <commit_hash> - 具体的 commit
+
+# 工作流步骤
+steps:
+  # Step 0: 智能变更检测（新增）
+  - id: detect-change-level
+    tool: code/fingerprint
+    input:
+      file_path: "{{inputs.project_path}}"
+      project_path: "{{inputs.project_path}}"
+      compare_with: "{{inputs.compare_with}}"
+    output: change_level
+  
+  # Step 1: 运行单元测试（条件执行）
+  - id: run-unit-tests
+    condition: "${change_level.change_level} != 'NONE'"
+    step: quality/run-tests
+    input:
+      project_path: "{{inputs.project_path}}"
+      test_type: unit
+    output: unit-test-result.md
+  
+  # Step 2: 运行集成测试（仅 STRUCTURAL 变更）
+  - id: run-integration-tests
+    condition: "${change_level.change_level} == 'STRUCTURAL'"
+    step: quality/run-tests
+    input:
+      project_path: "{{inputs.project_path}}"
+      test_type: integration
+    output: integration-test-result.md
+  
+  # Step 3: 质量检查（仅 STRUCTURAL 变更）
+  - id: check-quality
+    condition: "${change_level.change_level} == 'STRUCTURAL'"
+    step: quality/check-quality
+    input:
+      project_path: "{{inputs.project_path}}"
+    output: quality-report.md
+  
+  # Step 4: 代码审查（可选）
+  - id: review-code
+    condition: "${inputs.enable_review} == true"
+    step: quality/review-code
+    input:
+      project_path: "{{inputs.project_path}}"
+    output: review-result.md
+  
+  # Step 5: 验证完成（verification-before-completion）
+  - id: verify-completion
+    condition: "${change_level.change_level} != 'NONE'"
+    tool: verification/verify_completion
+    input:
+      claim: "all tests pass"
+      command: "npm test"
+      repo_path: "{{inputs.project_path}}"
+    output: verification_result
+
+# 输出
+outputs:
+  - change_level
+  - unit-test-result.md
+  - integration-test-result.md
+  - quality-report.md
+  - review-result.md
+  - verification_result
+
+# 铁律检查
+iron_laws:
+  - id: no_completion_without_verification
+    enforce_at: step-5
+    message: "完成前必须验证测试通过"
+  
+  - id: smart_test_scope
+    enforce_at: step-0
+    message: "必须先检测变更级别再决定测试范围"

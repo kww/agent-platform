@@ -1,0 +1,113 @@
+# wf-dev/execute-load.yml - Execute 模式：加载任务清单
+# ============================================================================
+# 用途：从 tasks.yml 加载任务清单
+# 输入：project_path
+# 输出：任务列表
+# ============================================================================
+
+id: wf-dev/execute-load
+name: 加载任务清单
+description: |
+  从 tasks.yml 加载任务清单
+  
+  验证：
+  - tasks.yml 存在
+  - 格式正确
+  - 有至少一个任务
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  strict_validation:
+    type: boolean
+    description: 严格验证
+    required: false
+    default: true
+
+# 输出
+outputs:
+  - name: project
+    type: object
+    description: 项目信息
+  
+  - name: tasks
+    type: array
+    description: 任务列表
+  
+  - name: task_count
+    type: number
+    description: 任务数量
+  
+  - name: execution_plan
+    type: object
+    description: 执行计划
+
+# 步骤流程
+steps:
+  # 1. 验证 tasks.yml 存在
+  - id: validate-exists
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        PROJECT_PATH="${inputs.project_path}"
+        TASKS_PATH="$PROJECT_PATH/tasks.yml"
+        
+        if [ ! -f "$TASKS_PATH" ]; then
+          echo "❌ tasks.yml 不存在: $TASKS_PATH"
+          echo ""
+          echo "请先运行 wf-planning 生成任务清单"
+          exit 1
+        fi
+        
+        echo "✅ tasks.yml 存在"
+  
+  # 2. 验证格式
+  - id: validate-format
+    condition: "${inputs.strict_validation} == true"
+    step: planning/validate-tasks
+    input:
+      tasks_path: "${inputs.project_path}/tasks.yml"
+      strict: true
+    output:
+      valid
+      errors
+      warnings
+  
+  # 3. 加载任务
+  - id: load-tasks
+    step: planning/load-tasks
+    input:
+      path: "${inputs.project_path}/tasks.yml"
+    output:
+      project
+      tasks
+      execution_plan
+  
+  # 4. 统计任务
+  - id: count-tasks
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        TASK_COUNT=$(echo "${steps.load-tasks.tasks}" | jq 'length')
+        
+        echo "📋 任务数量: $TASK_COUNT"
+        echo "task_count=$TASK_COUNT"
+        
+        if [ "$TASK_COUNT" -eq 0 ]; then
+          echo "⚠️ 无任务可执行"
+          exit 1
+        fi
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, execute, load, tasks]

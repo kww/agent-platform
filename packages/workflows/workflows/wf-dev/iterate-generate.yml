@@ -1,0 +1,98 @@
+# wf-dev/iterate-generate.yml - Iterate 模式：生成增量任务
+# ============================================================================
+# 用途：基于需求和分析结果，生成增量任务
+# 输入：requirement, analysis
+# 输出：tasks.yml
+# ============================================================================
+
+id: wf-dev/iterate-generate
+name: 生成增量任务
+description: |
+  基于需求和分析结果，生成增量任务清单
+  
+  输出：
+  - tasks.yml
+  - 任务数量
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  requirement:
+    type: string
+    description: 新功能需求
+    required: true
+  
+  analysis:
+    type: object
+    description: 代码库分析结果
+    required: true
+  
+  impact_analysis:
+    type: object
+    description: 影响分析结果
+    required: false
+
+# 输出
+outputs:
+  - name: tasks_path
+    type: string
+    description: tasks.yml 路径
+  
+  - name: task_count
+    type: number
+    description: 任务数量
+  
+  - name: tasks
+    type: array
+    description: 任务列表
+
+# 步骤流程
+steps:
+  # 1. 生成增量任务
+  - id: generate-iteration-tasks
+    execute:
+      type: builtin
+      handler: generate-iteration-tasks
+    input:
+      project_path: "${inputs.project_path}"
+      requirement: "${inputs.requirement}"
+      codebase: "${inputs.analysis}"
+      impact: "${inputs.impact_analysis}"
+    output:
+      tasks_path
+      task_count
+      tasks
+  
+  # 2. 验证任务生成
+  - id: validate-tasks
+    condition: "${steps.generate-iteration-tasks.task_count} > 0"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        TASK_COUNT="${steps.generate-iteration-tasks.task_count}"
+        TASKS_PATH="${steps.generate-iteration-tasks.tasks_path}"
+        
+        echo "✅ 已生成 $TASK_COUNT 个任务"
+        echo "📋 任务文件: $TASKS_PATH"
+  
+  # 3. 任务过多时警告
+  - id: warn-if-many-tasks
+    condition: "${steps.generate-iteration-tasks.task_count} > 10"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        echo "⚠️ 任务数较多（${steps.generate-iteration-tasks.task_count} 个），将自动启用 batch 模式"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, iterate, generate, tasks]

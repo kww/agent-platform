@@ -1,0 +1,327 @@
+# wf-audit.yml - 审计工作流
+# ============================================================================
+# 工作流类型: 治理
+# 触发方式: /wf-audit [--type task|quality|compliance] [--target <id>]
+# 核心理念: 独立审计，发现问题，追溯原因
+#
+# 流程：
+#   1. 确定审计范围
+#   2. 收集数据
+#   3. 分析评估
+#   4. 生成报告
+#   5. 决定是否弹劾
+# ============================================================================
+
+id: wf-audit
+stage: govern
+name: 审计工作流
+description: |
+  独立审计角色和任务的执行质量
+  
+  触发方式：
+  - 手动触发：/wf-audit --type <type> --target <id>
+  - 定期触发：每周自动审计
+  - 异常触发：检测到异常时自动审计
+  
+  审计类型：
+  - task: 审计特定任务
+  - quality: 审计质量指标
+  - efficiency: 审计效率指标
+  - compliance: 审计合规性
+  - comprehensive: 全面审计
+
+usageScenario: |
+  🎯 **适合场景**：
+  - 定期质量检查
+  - 问题溯源分析
+  - 合规性审查
+  - 绩效评估
+  
+  👤 **执行角色**：
+  - Auditor（审计官）
+  
+  ⚠️ **独立性保证**：
+  - 不参与项目开发
+  - 不受 tech-lead 管理
+  - 直接向用户负责
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🔍"
+  keywords: [审计, 检查, 合规, 质量]
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: audit_type
+    type: string
+    required: false
+    default: task
+    enum: [task, quality, efficiency, compliance, comprehensive]
+    description: 审计类型
+  
+  - name: target_id
+    type: string
+    required: false
+    description: 审计目标 ID（任务 ID 或角色 ID）
+  
+  - name: time_range
+    type: string
+    required: false
+    default: "7d"
+    description: 审计时间范围（如 7d, 1m, 3m）
+  
+  - name: audit_depth
+    type: string
+    required: false
+    default: standard
+    enum: [quick, standard, deep]
+    description: 审计深度
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 准备阶段
+  # ==========================================================================
+  - id: phase-1-prepare
+    phase: 准备审计
+  
+  - id: load-audit-config
+    script: |
+      #!/bin/bash
+      cd "${inputs.project_path}"
+      
+      # 解析时间范围
+      TIME_RANGE="${inputs.time_range}"
+      case "$TIME_RANGE" in
+        *d) DAYS="${TIME_RANGE%d}" ;;
+        *w) DAYS=$((${TIME_RANGE%w} * 7)) ;;
+        *m) DAYS=$((${TIME_RANGE%m} * 30)) ;;
+        *) DAYS=7 ;;
+      esac
+      
+      START_DATE=$(date -d "$DAYS days ago" -Iseconds)
+      END_DATE=$(date -Iseconds)
+      
+      echo "AUDIT_START=$START_DATE"
+      echo "AUDIT_END=$END_DATE"
+      echo "AUDIT_DAYS=$DAYS"
+      
+      # 创建审计目录
+      mkdir -p .agent/audits
+      
+  - id: collect-data
+    script: |
+      #!/bin/bash
+      cd "${inputs.project_path}"
+      
+      AUDIT_TYPE="${inputs.audit_type}"
+      TARGET_ID="${inputs.target_id:-all}"
+      
+      # 收集任务记录
+      if [ -f ".agent/tasks.yml" ]; then
+        echo "📋 收集任务记录..."
+        cp .agent/tasks.yml /tmp/audit-tasks.yml
+      fi
+      
+      # 收集签署文档
+      if [ -d ".agent/documents" ]; then
+        echo "📄 收集签署文档..."
+        cp -r .agent/documents /tmp/audit-docs/
+      fi
+      
+      # 收集绩效数据
+      if [ -f ".agent/performance.yml" ]; then
+        echo "📊 收集绩效数据..."
+        cp .agent/performance.yml /tmp/audit-performance.yml
+      fi
+      
+      # 收集 git 历史
+      echo "📝 收集 git 历史..."
+      git log --oneline --since="${steps.load-audit-config.output.AUDIT_START}" > /tmp/audit-commits.txt
+      
+      echo "DATA_COLLECTED=true"
+
+  # ==========================================================================
+  # Phase 2: 执行审计
+  # ==========================================================================
+  - id: phase-2-audit
+    phase: 执行审计
+  
+  # 根据审计类型选择不同路径
+  - id: audit-by-type
+    type: batch-iterator
+    source: "${inputs.audit_type == 'comprehensive' ? ['task', 'quality', 'compliance'] : [inputs.audit_type]}"
+    batch_var: current_audit_type
+    steps:
+      - id: run-audit
+        step: governance/audit-task
+        input:
+          task_id: "${inputs.target_id}"
+          project_path: "${inputs.project_path}"
+          audit_depth: "${inputs.audit_depth}"
+          focus_areas: 
+            - "${current_audit_type == 'quality' ? 'quality' : null}"
+            - "${current_audit_type == 'compliance' ? 'compliance' : null}"
+            - "${current_audit_type == 'task' ? 'process' : null}"
+        output:
+          - audit_result
+          - findings
+          - overall_assessment
+          - impeachment_required
+
+  # ==========================================================================
+  # Phase 3: 汇总结果
+  # ==========================================================================
+  - id: phase-3-summary
+    phase: 汇总结果
+  
+  - id: aggregate-findings
+    script: |
+      #!/bin/bash
+      
+      # 汇总所有审计发现
+      TOTAL_FINDINGS=0
+      CRITICAL=0
+      MAJOR=0
+      MINOR=0
+      
+      # 从审计结果中统计
+      # 这里简化处理，实际需要解析 audit-by-type 的输出
+      
+      cat > /tmp/audit-summary.json << JSONEOF
+      {
+        "total_findings": $TOTAL_FINDINGS,
+        "by_severity": {
+          "critical": $CRITICAL,
+          "major": $MAJOR,
+          "minor": $MINOR
+        }
+      }
+      JSONEOF
+      
+      echo "AUDIT_SUMMARY=/tmp/audit-summary.json"
+
+  - id: generate-audit-report
+    script: |
+      #!/bin/bash
+      cd "${inputs.project_path}"
+      
+      REPORT_ID="AUDIT-$(date +%Y%m%d)-$(printf '%03d' $RANDOM)"
+      REPORT_PATH=".agent/audits/${REPORT_ID}.md"
+      
+      cat > "$REPORT_PATH" << MDEOF
+      # 审计报告
+      
+      **报告 ID**: $REPORT_ID
+      **审计类型**: ${inputs.audit_type}
+      **审计时间**: $(date -Iseconds)
+      **审计范围**: ${steps.load-audit-config.output.AUDIT_START} ~ ${steps.load-audit-config.output.AUDIT_END}
+      
+      ---
+      
+      ## 概览
+      
+      | 指标 | 值 |
+      |------|-----|
+      | 审计目标 | ${inputs.target_id:-全部} |
+      | 审计深度 | ${inputs.audit_depth} |
+      | 发现问题数 | ${steps.aggregate-findings.output.TOTAL_FINDINGS} |
+      
+      ## 发现问题统计
+      
+      | 严重程度 | 数量 |
+      |----------|------|
+      | 🔴 Critical | ${steps.aggregate-findings.output.CRITICAL} |
+      | 🟠 Major | ${steps.aggregate-findings.output.MAJOR} |
+      | 🟡 Minor | ${steps.aggregate-findings.output.MINOR} |
+      
+      ---
+      
+      报告生成时间: $(date -Iseconds)
+      MDEOF
+      
+      echo "REPORT_ID=$REPORT_ID"
+      echo "REPORT_PATH=$REPORT_PATH"
+
+  # ==========================================================================
+  # Phase 4: 弹劾判断
+  # ==========================================================================
+  - id: phase-4-impeachment
+    phase: 弹劾判断
+    condition: "${steps.audit-by-type.output.impeachment_required} == true"
+  
+  - id: initiate-impeachment
+    step: governance/impeach
+    input:
+      target_id: "${steps.audit-by-type.output.impeachment_target}"
+      reason: "${steps.audit-by-type.output.impeachment_reason}"
+      severity: "major"
+      evidence: "${steps.audit-by-type.output.findings}"
+      audit_report_id: "${steps.generate-audit-report.output.REPORT_ID}"
+      initiated_by: "auditor"
+    output:
+      - impeachment_id
+      - status
+
+  # ==========================================================================
+  # Phase 5: 通知
+  # ==========================================================================
+  - id: phase-5-notify
+    phase: 通知
+  
+  - id: send-audit-notification
+    script: |
+      #!/bin/bash
+      
+      REPORT_ID="${steps.generate-audit-report.output.REPORT_ID}"
+      IMPEACHMENT_STATUS="${steps.initiate-impeachment.output.status:-none}"
+      
+      echo "📧 审计报告已生成: $REPORT_ID"
+      
+      if [ "$IMPEACHMENT_STATUS" != "none" ]; then
+        echo "⚠️ 弹劾流程已启动: ${steps.initiate-impeachment.output.impeachment_id}"
+      fi
+
+# 输出
+outputs:
+  - name: report_id
+    type: string
+    description: 审计报告 ID
+  
+  - name: report_path
+    type: file
+    path: "${inputs.project_path}/.agent/audits/${steps.generate-audit-report.output.REPORT_ID}.md"
+  
+  - name: findings_count
+    type: number
+    description: 发现问题数
+  
+  - name: impeachment_initiated
+    type: boolean
+    description: 是否启动弹劾
+  
+  - name: impeachment_id
+    type: string
+    description: 弹劾记录 ID（如果有）
+
+# 超时配置
+timeout: 1800  # 30 分钟
+
+# 重试配置
+retry:
+  maxAttempts: 1
+
+# 标签
+tags:
+  - audit
+  - governance
+  - quality
+
+# 分类
+category: governance

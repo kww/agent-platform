@@ -1,0 +1,154 @@
+# wf-verify.yml - 验收工作流
+
+id: wf-verify
+name: 验收工作流
+description: |
+  统一验收流程：Spec 创建 → 回测 → 测试 → 验收确认
+  
+  **适用场景**：
+  - Roadmap 待办完成开发后
+  - 发现已实现代码需要验收
+  - Phase 验收确认
+  
+usageScenario: |
+  🎯 **触发条件**：
+  - 用户说"验收 XX"
+  - Roadmap 待办状态检查后
+  - Phase 完成确认
+  
+  ⚠️ **前置条件**：
+  - 有设计文档（issues/xx-xxx.md）
+  - 有代码实现（或已完成开发）
+
+trigger:
+  patterns:
+    - "验收"
+    - "验收确认"
+    - "Phase 验收"
+    - "检查 XX 是否已实现"
+
+# ============================================================================
+# 验收流程步骤
+# ============================================================================
+
+steps:
+  # Step 1: Roadmap 状态检查（约束 C4）
+  - id: check-roadmap-status
+    name: Roadmap 状态检查
+    description: 检查 Roadmap 待办的实际实现状态
+    constraint: C4
+    actions:
+      - grep -rn "class/interface" path/*.ts
+      - ls path/__tests__/*.test.ts
+      - npm test -- --testPathPattern="xxx"
+    output:
+      format: judgment_matrix
+      type: |
+        | Roadmap | 代码 | 测试 | 实际状态 | 行动 |
+        |:------:|:----:|:----:|:--------:|------|
+        | ⬜ | ❌ | ❌ | 未实现 | 开发 |
+        | ⬜ | ✅ | ❌ | 已实现未验收 | 补测试+验收 |
+        | ⬜ | ✅ | ✅ | 已实现已测试 | 验收确认 |
+        
+  # Step 2: Spec 文件检查（约束 C6）
+  - id: check-spec-exists
+    name: Spec 文件检查
+    description: 检查验收需要的 Spec 是否存在
+    constraint: C6
+    condition: 
+      - step.check-roadmap-status.result != "未实现"
+    actions:
+      - ls docs/specs/xxx.md
+    branches:
+      - condition: spec_exists == true
+        goto: spec-backtest
+      - condition: spec_exists == false
+        goto: create-spec
+        
+  # Step 3: 创建 Spec（分支）
+  - id: create-spec
+    name: 创建 Spec 文件
+    description: 从设计文档提取功能点，创建 Spec
+    actions:
+      - read 设计文档 (issues/xx-xxx.md)
+      - extract 功能点列表
+      - create docs/specs/xxx.md
+    next: spec-backtest
+    
+  # Step 4: Spec 回测
+  - id: spec-backtest
+    name: Spec 回测
+    description: 对照 Spec 功能点 vs 代码实现
+    actions:
+      - read docs/specs/xxx.md
+      - extract 功能点
+      - check 代码实现
+      - output 对照表（✅/⚠️/❌/⏸️）
+    output:
+      format: spec_backtest_table
+      
+  # Step 5: 补测试（如有遗漏）
+  - id: add-tests
+    name: 补充测试
+    description: 根据回测结果补充测试
+    condition: 
+      - step.spec-backtest.result == "有遗漏"
+    actions:
+      - create test files
+      - npm test
+    next: verify-confirm
+    
+  # Step 6: 验收确认
+  - id: verify-confirm
+    name: 验收确认
+    description: 更新 Roadmap 状态，记录验收结果
+    actions:
+      - update Roadmap (⬜ → ✅)
+      - update completed/YYYY-MM-DD.md
+      - update memory/YYYY-MM-DD.md
+      - git commit
+    output:
+      message: "验收完成 ✅"
+
+# ============================================================================
+# 约束引用
+# ============================================================================
+
+constraints:
+  - id: C4
+    name: Roadmap 状态检查
+    location: docs/processes/roadmap-to-spec-workflow.md
+  - id: C6
+    name: 验收依赖 Spec
+    location: docs/task-completion-checklist.md
+
+# ============================================================================
+# 输出模板
+# ============================================================================
+
+outputTemplate:
+  specBacktestTable: |
+    ## Spec 回测结果
+    
+    | Spec | 功能 | 代码位置 | 状态 | 备注 |
+    |------|------|----------|:----:|------|
+    | 1.1 | 功能1 | path | ✅ | 完整 |
+    | 1.2 | 功能2 | path | ⚠️ | 空实现 |
+    
+    ### 遗漏项处理
+    | 项 | 原因 | 处理 |
+    |---|------|------|
+    | 功能2 | 包结构问题 | 技术债 TD-xxx |
+
+  judgmentMatrix: |
+    | Roadmap | 代码 | 测试 | 实际状态 | 行动 |
+    |:------:|:----:|:----:|:--------:|------|
+    | ⬜ | ✅ | ✅ | 已实现已测试 | 验收确认 |
+
+---
+
+## 相关文档
+
+- [约束索引](constraint-index.md)
+- [Roadmap 待办流程](processes/roadmap-to-spec-workflow.md)
+- [任务完成检查清单](task-completion-checklist.md)

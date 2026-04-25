@@ -1,0 +1,58 @@
+# TypeScript 项目上下文
+
+language: typescript
+fileExtensions:
+  - .ts
+  - .tsx
+  - .d.ts
+
+entryPoints:
+  - src/index.ts
+  - src/main.ts
+  - src/app.ts
+  - src/server.ts
+
+commonPatterns:
+  - "ESM imports"
+  - "Type annotations"
+  - "Interfaces"
+  - "Generics"
+
+excludeDirs:
+  - node_modules
+  - dist
+  - build
+  - coverage
+  - .next
+  - out
+
+testPatterns:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "**/__tests__/**"
+
+lintConfig:
+  - eslint.config.js
+  - .eslintrc.js
+  - .eslintrc.json
+
+formatConfig:
+  - prettier.config.js
+  - .prettierrc
+
+defaultPipelines:
+  frontend: frontend-typescript
+  backend: backend-typescript
+  test: jest
+
+bestPractices:
+  - "使用 interface 定义对象类型"
+  - "使用 type 定义联合类型和工具类型"
+  - "避免 any，使用 unknown 或具体类型"
+  - "启用 strict 模式"
+
+commonDependencies:
+  - typescript
+  - "@types/node"
+  - ts-node
+  - tsx

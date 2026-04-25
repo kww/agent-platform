@@ -1,0 +1,24 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+.env.local
+tmp/
+*.tmp
+
+# 工作流执行目录
+wf-*/
+test-*/
+.agent-runtime/
+
+# GitHub workflows should be tracked
+# .github/ is ignored except workflows
+.github/*
+!.github/workflows/
+
+# Harness traces
+.harness/traces/
+.harness/diagnoses/
+.harness/proposals/

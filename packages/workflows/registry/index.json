@@ -1,0 +1,370 @@
+{
+  "tools": [
+    {
+      "name": "browser-automate",
+      "category": "browser",
+      "type": "tool",
+      "description": "基于 Puppeteer 的浏览器自动化测试，模拟人类点击操作发现问题",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/browser/browser-automate.yml"
+    },
+    {
+      "name": "browser-mcp-debug",
+      "category": "browser",
+      "type": "tool",
+      "description": "基于 Chrome DevTools Protocol 的高级浏览器调试能力，提供：",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/browser/browser-mcp-debug.yml"
+    },
+    {
+      "name": "code/fingerprint",
+      "category": "code",
+      "type": "tool",
+      "description": "生成代码结构指纹，用于变更检测。",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/code/fingerprint.yml"
+    },
+    {
+      "name": "code/parse",
+      "category": "code",
+      "type": "tool",
+      "description": "使用 Tree-sitter 解析代码文件，提取 AST 结构。",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/code/parse.yml"
+    },
+    {
+      "name": "code/register-language",
+      "category": "code",
+      "type": "tool",
+      "description": "注册编程语言支持。",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/code/register-language.yml"
+    },
+    {
+      "name": "docker-build",
+      "category": "docker",
+      "type": "tool",
+      "description": "构建 Docker 镜像",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/docker/build.yml"
+    },
+    {
+      "name": "docker-run",
+      "category": "docker",
+      "type": "tool",
+      "description": "运行 Docker 容器",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/docker/run.yml"
+    },
+    {
+      "name": "file-copy",
+      "category": "file",
+      "type": "tool",
+      "description": "复制文件或目录",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/file/copy.yml"
+    },
+    {
+      "name": "file-read",
+      "category": "file",
+      "type": "tool",
+      "description": "读取文件内容",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/file/read.yml"
+    },
+    {
+      "name": "file-write",
+      "category": "file",
+      "type": "tool",
+      "description": "写入文件内容",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/file/write.yml"
+    },
+    {
+      "name": "git-branch",
+      "category": "git",
+      "type": "tool",
+      "description": "创建并切换 Git 分支",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/git/branch.yml"
+    },
+    {
+      "name": "git-cleanup-worktree",
+      "category": "git",
+      "type": "tool",
+      "description": "开发完成后清理 Git Worktree 隔离工作空间",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/git/cleanup-worktree.yml"
+    },
+    {
+      "name": "git-clone",
+      "category": "git",
+      "type": "tool",
+      "description": "克隆 Git 仓库到本地",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/git/clone.yml"
+    },
+    {
+      "name": "git-commit",
+      "category": "git",
+      "type": "tool",
+      "description": "Git 提交更改",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/git/commit.yml"
+    },
+    {
+      "name": "git-push",
+      "category": "git",
+      "type": "tool",
+      "description": "推送 Git 分支到远程",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/git/push.yml"
+    },
+    {
+      "name": "git-worktree",
+      "category": "git",
+      "type": "tool",
+      "description": "为新功能创建隔离的 Git Worktree，避免污染主分支",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/git/worktree.yml"
+    },
+    {
+      "name": "aggregate-opinions",
+      "category": "governance",
+      "type": "tool",
+      "description": "汇聚多立场审核意见",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/governance/aggregate-opinions.yml"
+    },
+    {
+      "name": "define-stance",
+      "category": "governance",
+      "type": "tool",
+      "description": "注入立场 prompt（三省六部制核心工具）",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/governance/define-stance.yml"
+    },
+    {
+      "name": "npm-build",
+      "category": "npm",
+      "type": "tool",
+      "description": "构建 npm/pnpm 项目",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/npm/build.yml"
+    },
+    {
+      "name": "npm-install",
+      "category": "npm",
+      "type": "tool",
+      "description": "安装 npm/pnpm 依赖",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/npm/install.yml"
+    },
+    {
+      "name": "npm-test",
+      "category": "npm",
+      "type": "tool",
+      "description": "运行 npm/pnpm 测试",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/npm/test.yml"
+    },
+    {
+      "name": "spawn-codex",
+      "category": "spawn",
+      "type": "tool",
+      "description": "启动 Codex Agent 执行任务",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/spawn/codex.yml"
+    },
+    {
+      "name": "spawn-parallel",
+      "category": "spawn",
+      "type": "tool",
+      "description": "并行执行多个命令，派发任务给多个 Agent",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/spawn/parallel.yml"
+    },
+    {
+      "name": "check-reuse",
+      "category": "validation",
+      "type": "tool",
+      "description": "在创建新能力前检查是否有可复用的现有能力",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/validation/check-reuse.yml"
+    },
+    {
+      "name": "validate-handlers",
+      "category": "validation",
+      "type": "tool",
+      "description": "检查 step 的 handler 是否都在 builtin-handlers.ts 中注册",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/validation/validate-handlers.yml"
+    },
+    {
+      "name": "validate-readme-stats",
+      "category": "validation",
+      "type": "tool",
+      "description": "检查 README 统计数据是否与实际文件数量一致",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/validation/validate-readme-stats.yml"
+    },
+    {
+      "name": "validate-yaml-syntax",
+      "category": "validation",
+      "type": "tool",
+      "description": "检查所有 YAML 文件语法正确性",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/validation/validate-yaml-syntax.yml"
+    },
+    {
+      "name": "verify-completion",
+      "category": "verification",
+      "type": "tool",
+      "description": "任务完成前验证，运行验证命令并检查结果",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/verification/verify_completion.yml"
+    },
+    {
+      "name": "wait-condition",
+      "category": "verification",
+      "type": "tool",
+      "description": "等待条件满足后再继续执行，支持轮询检查",
+      "path": "/root/projects/agent-platform/packages/workflows/tools/verification/wait-condition.yml"
+    }
+  ],
+  "workflows": [
+    {
+      "name": "test-batch-iterator-simple",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/test-batch-iterator-simple.yml"
+    },
+    {
+      "name": "test-batch-iterator",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "测试 batch-iterator 执行类型",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/test-batch-iterator.yml"
+    },
+    {
+      "name": "test-execute-phases-mock",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "测试 wf-execute-phases 核心流程（不调用 Agent）",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/test-execute-phases-mock.yml"
+    },
+    {
+      "name": "test-split-batch",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "测试 split-batch 步骤",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/test-split-batch.yml"
+    },
+    {
+      "name": "wf-architecture-review",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "架构设计多立场审核",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-architecture-review.yml"
+    },
+    {
+      "name": "wf-audit",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "独立审计角色和任务的执行质量",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-audit.yml"
+    },
+    {
+      "name": "wf-bugfix",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "L1 轻量工作流 - Bug 系统性修复，轻量验证",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-bugfix.yml"
+    },
+    {
+      "name": "wf-continue",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "读取 tasks.yml 任务清单，按执行计划并行开发任务",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-continue.yml"
+    },
+    {
+      "name": "wf-dev-fast",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "最大化并行的快速开发流程",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-dev-fast.yml"
+    },
+    {
+      "name": "wf-dev",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "团队协作开发流程，前后端并行开发",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-dev.yml"
+    },
+    {
+      "name": "wf-evolution",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "定期评审并实现进化建议，持续改进系统能力",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-evolution.yml"
+    },
+    {
+      "name": "wf-execute-phases",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "分批执行开发任务，每批次独立审查。",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-execute-phases.yml"
+    },
+    {
+      "name": "wf-full",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "从需求到发布的一站式完整流程",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-full.yml"
+    },
+    {
+      "name": "wf-iterate",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "在已有项目上开发新功能，支持迭代优化",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-iterate.yml"
+    },
+    {
+      "name": "wf-patch",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "L0 极简工作流 - 配置/文案修改，无验证",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-patch.yml"
+    },
+    {
+      "name": "wf-planning",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "完整规划流程，包含需求分析和架构设计",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-planning.yml"
+    },
+    {
+      "name": "wf-quick",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "L1 轻量工作流 - 小功能/原型开发，轻量验证",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-quick.yml"
+    },
+    {
+      "name": "wf-release",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "测试验证后发布到生产环境",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-release.yml"
+    },
+    {
+      "name": "wf-review",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "通用审核工作流（多立场审核）",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-review.yml"
+    },
+    {
+      "name": "wf-test",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "运行测试验证代码，支持代码审查",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-test.yml"
+    },
+    {
+      "name": "wf-validate-project",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "验证项目是否准备好使用工作流",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-validate-project.yml"
+    },
+    {
+      "name": "wf-validate",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "验证项目完整性和一致性",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-validate.yml"
+    },
+    {
+      "name": "wf-verify-loop",
+      "category": "uncategorized",
+      "type": "workflow",
+      "description": "动态验证闭环 - 跑起来发现bug修复bug验证bug",
+      "path": "/root/projects/agent-platform/packages/workflows/workflows/wf-verify-loop.yml"
+    }
+  ]
+}

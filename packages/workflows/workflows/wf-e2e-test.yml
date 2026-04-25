@@ -1,0 +1,527 @@
+# wf-e2e-test.yml - E2E 测试工作流
+# ============================================================================
+# 工作流类型: E2E 测试
+# 触发方式: /wf-e2e-test <project_path> <test_url>
+# 核心理念: 跑起来发现bug修复bug验证bug的循环
+#
+# 隔离模式:
+#   - process: 进程隔离（Claude Code Docker），适合开发阶段快速验证
+#   - application: 应用隔离（Docker 容器），适合发布前完整验证
+#
+# 复用现有能力:
+#   - Claude Code Docker - 进程级隔离，已解决 root 权限问题
+#   - tools/docker/run.yml - 应用级隔离
+#   - tools/browser/browser-automate.yml - 浏览器操作
+#   - tools/browser/browser-mcp-debug.yml - Chrome DevTools 分析
+# ============================================================================
+
+id: wf-e2e-test
+stage: verify
+name: E2E 测试
+description: |
+  动态验证闭环 - 跑起来发现bug修复bug验证bug
+  
+  支持两种隔离模式：
+  - **进程隔离**（默认）：快速迭代，适合开发阶段
+  - **应用隔离**：完整环境，适合发布前验证
+  
+  核心流程：
+  1. 启动应用（根据隔离模式）
+  2. 浏览器操作测试
+  3. Chrome DevTools 分析（网络/性能/内存）
+  4. 检查日志错误
+  5. 发现问题 → 修复 → 重新验证
+  
+  循环直到：无错误 / 达到最大循环次数
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 功能开发完成后的端到端验证
+  - UI 交互测试
+  - 性能问题排查
+  - 内存泄漏检测
+  - 安全审计
+  
+  📊 **隔离模式选择**：
+  - 开发阶段 → 进程隔离（快，共享代码）
+  - 发布阶段 → 应用隔离（完整，模拟生产）
+  
+  ⚠️ **不适合**：
+  - 单元测试 → 用 wf-test
+  - 代码审查 → 用 wf-review
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🔍"
+  keywords: [验证, 测试, E2E, 浏览器, 调试]
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: test_url
+    type: string
+    required: true
+    description: 测试地址（如 http://localhost:3000）
+  
+  - name: isolation_mode
+    type: string
+    required: false
+    default: "process"
+    enum: [process, application]
+    description: |
+      隔离模式：
+      - process: 进程隔离（Claude Code Docker），适合开发阶段
+      - application: 应用隔离（Docker 容器），适合发布前验证
+  
+  - name: test_actions
+    type: array
+    required: false
+    description: 浏览器测试操作序列
+    default: []
+    items:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [click, type, wait, screenshot, assert, scroll]
+        selector:
+          type: string
+        value:
+          type: string
+        delay:
+          type: number
+  
+  - name: diagnostic_types
+    type: array
+    required: false
+    default: [network, performance]
+    description: Chrome DevTools 诊断类型
+  
+  - name: max_loops
+    type: number
+    required: false
+    default: 3
+    description: 最大验证循环次数
+  
+  - name: docker_image
+    type: string
+    required: false
+    description: Docker 镜像名（application 模式必填）
+  
+  - name: start_command
+    type: string
+    required: false
+    default: "npm run dev"
+    description: 启动命令（process 模式使用）
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 0: 模式选择与准备
+  # ==========================================================================
+  - id: phase-0-prepare
+    phase: 准备
+    
+  - id: validate-inputs
+    script: |
+      #!/bin/bash
+      
+      MODE="${inputs.isolation_mode}"
+      DOCKER_IMAGE="${inputs.docker_image}"
+      
+      if [ "$MODE" = "application" ] && [ -z "$DOCKER_IMAGE" ]; then
+        echo "❌ application 模式需要指定 docker_image 参数"
+        exit 1
+      fi
+      
+      echo "✅ 隔离模式: $MODE"
+      echo "ISOLATION_MODE=$MODE"
+
+  # ==========================================================================
+  # Phase 1: 进程隔离模式（Claude Code Docker）
+  # ==========================================================================
+  - id: phase-1-process
+    phase: 进程隔离验证
+    condition: "${inputs.isolation_mode} == 'process'"
+    
+  - id: verify-process-mode
+    agent: codex
+    prompt: |
+      ## 验证闭环任务（进程隔离模式）
+      
+      在隔离环境中执行验证循环。
+      
+      ### 环境
+      - 项目路径: {{inputs.project_path}}
+      - 测试地址: {{inputs.test_url}}
+      - 启动命令: {{inputs.start_command}}
+      - 最大循环: {{inputs.max_loops}} 次
+      
+      ### 验证循环流程
+      
+      1. 启动应用（如果未启动）
+      2. 浏览器测试（访问测试地址，检查响应）
+      3. 检查日志错误
+      4. 发现问题 → 分析根本原因 → 修复
+      5. 重启应用 → 重新验证
+      
+      循环直到：
+      - 无错误 → 通过
+      - 达到最大循环次数 → 失败
+      
+      ### 要求
+      1. 在循环中发现错误时，分析根本原因并修复
+      2. 不要修改测试文件来规避问题
+      3. 记录每次循环发现的问题和修复内容
+      4. 生成验证报告到 .agent/verify-report.md
+    
+    output:
+      - verify_passed
+      - errors_found
+      - errors_fixed
+      - verify_report
+  
+  - id: generate-process-report
+    condition: "${steps.verify-process-mode.completed}"
+    script: |
+      #!/bin/bash
+      
+      REPORT_PATH="${inputs.project_path}/.agent/verify-report.md"
+      
+      cat > "$REPORT_PATH" << 'MDEOF'
+      # 验证报告（进程隔离模式）
+      
+      ## 概览
+      
+      | 指标 | 值 |
+      |------|-----|
+      | 隔离模式 | 进程隔离（Claude Code Docker） |
+      | 验证状态 | ${steps.verify-process-mode.output.verify_passed ? "✅ 通过" : "❌ 失败"} |
+      | 发现错误 | ${steps.verify-process-mode.output.errors_found} |
+      | 已修复错误 | ${steps.verify-process-mode.output.errors_fixed} |
+      
+      ---
+      
+      验证时间: $(date -Iseconds)
+      MDEOF
+      
+      echo "✅ 报告已生成: $REPORT_PATH"
+
+  # ==========================================================================
+  # Phase 2: 应用隔离模式（Docker 容器）
+  # ==========================================================================
+  - id: phase-2-application
+    phase: 应用隔离验证
+    condition: "${inputs.isolation_mode} == 'application'"
+    
+  - id: start-container
+    tool: docker/run
+    input:
+      image_name: "${inputs.docker_image}"
+      container_name: "verify-test-${workflow.executionId}"
+      ports: "3000:3000"
+    output:
+      - container_id
+    
+  - id: wait-container-ready
+    script: |
+      #!/bin/bash
+      
+      URL="${inputs.test_url}/health"
+      
+      # 如果没有 /health 端点，尝试根路径
+      if ! curl -s -o /dev/null "$URL" 2>/dev/null; then
+        URL="${inputs.test_url}"
+      fi
+      
+      echo "等待容器启动..."
+      
+      for i in {1..30}; do
+        if curl -s -o /dev/null -w "%{http_code}" "$URL" 2>/dev/null | grep -q "200\|304"; then
+          echo "✅ 容器已就绪"
+          exit 0
+        fi
+        sleep 2
+      done
+      
+      echo "❌ 容器启动失败"
+      exit 1
+    
+  # 验证循环（应用隔离模式）
+  - id: verify-application-loop
+    type: loop
+    max_iterations: "${inputs.max_loops}"
+    initial_state:
+      iteration: 0
+      errors_found: 0
+      errors_fixed: 0
+      passed: false
+    
+    steps:
+      # -----------------------------------------------------------------------
+      # 浏览器测试
+      # -----------------------------------------------------------------------
+      - id: browser-test-app
+        tool: browser/browser-automate
+        input:
+          url: "${inputs.test_url}"
+          actions: "${inputs.test_actions}"
+          headless: true
+          timeout: 60000
+        output:
+          - test_results
+          - screenshots
+          - metrics
+      
+      # -----------------------------------------------------------------------
+      # Chrome DevTools 分析
+      # -----------------------------------------------------------------------
+      - id: devtools-analysis-app
+        tool: browser/browser-mcp-debug
+        input:
+          url: "${inputs.test_url}"
+          diagnostic_type: "all"
+          timeout: 120000
+        output:
+          - network_analysis
+          - performance_audit
+          - memory_analysis
+          - security_audit
+      
+      # -----------------------------------------------------------------------
+      # 检查容器日志
+      # -----------------------------------------------------------------------
+      - id: check-container-logs
+        script: |
+          #!/bin/bash
+          set -e
+          
+          CONTAINER_ID="${steps.start-container.output.container_id}"
+          LOGS=$(docker logs $CONTAINER_ID 2>&1)
+          
+          # 提取错误
+          ERRORS=$(echo "$LOGS" | grep -iE "error|exception|fail|warn.*fail" | tail -20 || echo "")
+          ERROR_COUNT=$(echo "$ERRORS" | grep -c . || echo "0")
+          
+          echo "ERROR_COUNT=$ERROR_COUNT"
+          echo "ERRORS<<EOF"
+          echo "$ERRORS"
+          echo "EOF"
+      
+      # -----------------------------------------------------------------------
+      # 分析结果
+      # -----------------------------------------------------------------------
+      - id: analyze-app-results
+        script: |
+          #!/bin/bash
+          
+          BROWSER_ERRORS="${steps.browser-test-app.output.errors}" || echo "[]"
+          NETWORK_ERRORS="${steps.devtools-analysis-app.output.network_analysis.failedRequests}" || echo "0"
+          MEMORY_LEAK="${steps.devtools-analysis-app.output.memory_analysis.potentialLeak}" || echo "false"
+          LOG_ERRORS="${steps.check-container-logs.output.ERROR_COUNT}" || echo "0"
+          
+          TOTAL_ERRORS=$((LOG_ERRORS + NETWORK_ERRORS))
+          
+          if [ "$MEMORY_LEAK" = "true" ]; then
+            TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+          fi
+          
+          echo "TOTAL_ERRORS=$TOTAL_ERRORS"
+          echo "NEEDS_FIX=$([ $TOTAL_ERRORS -gt 0 ] && echo 'true' || echo 'false')"
+      
+      # -----------------------------------------------------------------------
+      # 有错误 → 修复
+      # -----------------------------------------------------------------------
+      - id: fix-app-bugs
+        condition: "${steps.analyze-app-results.output.NEEDS_FIX}"
+        agent: codex
+        prompt: |
+          ## 验证发现问题（应用隔离模式）
+          
+          当前是第 ${state.iteration} 次验证循环。
+          
+          ### 浏览器测试错误
+          ```
+          ${steps.browser-test-app.output.errors}
+          ```
+          
+          ### 网络问题
+          ```
+          ${steps.devtools-analysis-app.output.network_analysis}
+          ```
+          
+          ### 应用日志错误
+          ```
+          ${steps.check-container-logs.output.ERRORS}
+          ```
+          
+          ---
+          
+          请分析这些错误并修复。
+          
+          **项目路径**: ${inputs.project_path}
+          
+          **要求**：
+          1. 分析每个错误的根本原因
+          2. 提供修复方案并实施
+          3. 不要修改测试文件来规避问题
+        
+        output:
+          - fixes_applied
+      
+      # -----------------------------------------------------------------------
+      # 重新构建镜像
+      # -----------------------------------------------------------------------
+      - id: rebuild-image
+        condition: "${steps.fix-app-bugs.completed}"
+        tool: docker/build
+        input:
+          context: "${inputs.project_path}"
+          image_name: "${inputs.docker_image}"
+      
+      # -----------------------------------------------------------------------
+      # 重启容器
+      # -----------------------------------------------------------------------
+      - id: restart-container
+        condition: "${steps.fix-app-bugs.completed}"
+        script: |
+          #!/bin/bash
+          
+          OLD_CONTAINER="${steps.start-container.output.container_id}"
+          
+          # 停止并删除旧容器
+          docker stop $OLD_CONTAINER 2>/dev/null || true
+          docker rm $OLD_CONTAINER 2>/dev/null || true
+          
+          # 启动新容器
+          NEW_CONTAINER=$(docker run -d --name "verify-test-${workflow.executionId}-new" -p 3000:3000 "${inputs.docker_image}")
+          echo "NEW_CONTAINER_ID=$NEW_CONTAINER"
+          
+          sleep 5
+      
+      # -----------------------------------------------------------------------
+      # 更新状态
+      # -----------------------------------------------------------------------
+      - id: update-app-state
+        action: set_state
+        state:
+          iteration: "${state.iteration + 1}"
+          errors_found: "${state.errors_found + steps.analyze-app-results.output.TOTAL_ERRORS}"
+          errors_fixed: "${state.errors_fixed + (steps.fix-app-bugs.completed ? steps.analyze-app-results.output.TOTAL_ERRORS : 0)}"
+          passed: "!${steps.analyze-app-results.output.NEEDS_FIX}"
+    
+    # 循环退出条件
+    loop_condition: "${state.passed} == false"
+  
+  # 生成应用隔离模式报告
+  - id: generate-application-report
+    condition: "${inputs.isolation_mode} == 'application'"
+    script: |
+      #!/bin/bash
+      
+      REPORT_PATH="${inputs.project_path}/.agent/verify-report.md"
+      
+      cat > "$REPORT_PATH" << MDEOF
+      # 验证报告（应用隔离模式）
+      
+      ## 概览
+      
+      | 指标 | 值 |
+      |------|-----|
+      | 隔离模式 | 应用隔离（Docker 容器） |
+      | 验证状态 | ${steps.verify-application-loop.output.passed ? "✅ 通过" : "❌ 失败"} |
+      | 验证循环次数 | ${steps.verify-application-loop.output.iteration} |
+      | 发现错误总数 | ${steps.verify-application-loop.output.errors_found} |
+      | 已修复错误 | ${steps.verify-application-loop.output.errors_fixed} |
+      
+      ## Chrome DevTools 分析
+      
+      ### 网络分析
+      - 总请求数: ${steps.devtools-analysis-app.output.network_analysis.summary.totalRequests}
+      - 成功响应: ${steps.devtools-analysis-app.output.network_analysis.summary.successfulResponses}
+      - 失败请求: ${steps.devtools-analysis-app.output.network_analysis.summary.failedRequests}
+      
+      ### 性能指标
+      - LCP: ${steps.devtools-analysis-app.output.performance_audit.webVitals.lcp}ms
+      - FCP: ${steps.devtools-analysis-app.output.performance_audit.webVitals.fcp}ms
+      - CLS: ${steps.devtools-analysis-app.output.performance_audit.webVitals.cls}
+      
+      ### 内存分析
+      - 初始堆大小: ${steps.devtools-analysis-app.output.memory_analysis.summary.initialHeapMB}MB
+      - 最终堆大小: ${steps.devtools-analysis-app.output.memory_analysis.summary.finalHeapMB}MB
+      - 增长百分比: ${steps.devtools-analysis-app.output.memory_analysis.summary.growthPercent}%
+      - 潜在泄漏: ${steps.devtools-analysis-app.output.memory_analysis.summary.potentialLeak ? "⚠️ 是" : "✅ 否"}
+      
+      ---
+      
+      验证时间: $(date -Iseconds)
+      MDEOF
+      
+      echo "✅ 报告已生成: $REPORT_PATH"
+
+  # ==========================================================================
+  # Phase 3: 清理
+  # ==========================================================================
+  - id: phase-3-cleanup
+    phase: 清理
+  
+  - id: cleanup-containers
+    condition: "${inputs.isolation_mode} == 'application'"
+    script: |
+      #!/bin/bash
+      
+      # 清理所有测试容器
+      docker ps -a --filter "name=verify-test" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+      
+      echo "✅ 容器已清理"
+
+# 输出
+outputs:
+  - name: verify_report
+    type: file
+    path: "${inputs.project_path}/.agent/verify-report.md"
+  
+  - name: isolation_mode
+    type: string
+    description: 使用的隔离模式
+  
+  - name: passed
+    type: boolean
+    description: 验证是否通过
+  
+  - name: errors_found
+    type: number
+    description: 发现的错误总数
+  
+  - name: errors_fixed
+    type: number
+    description: 已修复的错误数量
+
+# 超时配置
+timeout: 1800  # 30 分钟
+
+# 重试配置
+retry:
+  maxAttempts: 1
+  backoff: fixed
+  initialDelay: 5000
+
+# 标签
+tags:
+  - verification
+  - e2e
+  - browser
+  - devtools
+  - loop
+  - docker
+  - claude-code
+  - isolation
+
+# 分类
+category: quality

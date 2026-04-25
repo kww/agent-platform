@@ -1,0 +1,404 @@
+# wf-evolution.yml - 系统进化工作流
+# ============================================================================
+# 工作流类型: 系统进化
+# 触发方式: /wf-evolution [--auto] [--max-items 5]
+# 核心理念: 定期评审进化建议，持续改进系统能力
+#
+# 流程：
+#   1. 加载进化待办
+#   2. 优先级排序
+#   3. 多立场审核（Auditor + Architect + Decider）
+#   4. 实现批准的建议
+#   5. 验证效果
+#   6. 归档
+# ============================================================================
+
+id: wf-evolution
+stage: govern
+name: 系统进化工作流
+description: |
+  定期评审并实现进化建议，持续改进系统能力
+  
+  触发方式：
+  - 手动触发：/wf-evolution
+  - 定时触发：每周执行一次（推荐）
+  - 阈值触发：积压超过 N 条建议时
+  
+  流程：
+  1. 加载 evolution-backlog.yml
+  2. 按严重性 + 频率 + 影响范围排序
+  3. 多立场审核（Auditor 主导）
+  4. 实现批准的建议
+  5. 验证效果
+  6. 更新状态
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 定期系统改进
+  - 能力缺口修复
+  - 工作流优化
+  - 约束调整
+  
+  📊 **建议频率**：
+  - 开发期：每天
+  - 稳定期：每周
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🧬"
+  keywords: [进化, 改进, 能力, 优化]
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: auto_mode
+    type: boolean
+    required: false
+    default: false
+    description: |
+      自动模式：
+      - true: 自动实现所有 accepted 的建议
+      - false: 每个建议需要人工确认
+  
+  - name: max_items
+    type: number
+    required: false
+    default: 5
+    description: 本次最多处理的建议数量
+  
+  - name: min_severity
+    type: string
+    required: false
+    default: "medium"
+    enum: [low, medium, high, critical]
+    description: 最低严重性过滤
+  
+  - name: stances
+    type: array
+    required: false
+    default: ["auditor", "architect", "decider"]
+    description: 参与审核的立场
+
+# 工作流步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 加载与排序
+  # ==========================================================================
+  - id: phase-1-load
+    phase: 加载与排序
+  
+  - id: load-backlog
+    step: evolution/prioritize
+    input:
+      project_path: "${inputs.project_path}"
+      max_items: "${inputs.max_items}"
+      min_severity: "${inputs.min_severity}"
+      status_filter: ["open", "in_review"]
+    output:
+      - prioritized_items
+      - statistics
+  
+  - id: check-items
+    script: |
+      #!/bin/bash
+      
+      ITEM_COUNT=$(echo '${steps.load-backlog.output.prioritized_items}' | jq 'length')
+      
+      if [ "$ITEM_COUNT" -eq 0 ]; then
+        echo "✅ 无待处理的进化建议"
+        echo "HAS_ITEMS=false"
+      else
+        echo "📋 发现 $ITEM_COUNT 条待处理建议"
+        echo "HAS_ITEMS=true"
+      fi
+
+  # ==========================================================================
+  # Phase 2: 审核循环
+  # ==========================================================================
+  - id: phase-2-review
+    phase: 审核建议
+    condition: "${steps.check-items.output.HAS_ITEMS}"
+  
+  - id: review-loop
+    type: loop
+    max_iterations: "${inputs.max_items}"
+    initial_state:
+      processed: 0
+      accepted: 0
+      rejected: 0
+      implemented: 0
+    
+    steps:
+      # -----------------------------------------------------------------------
+      # 2.1 获取当前建议
+      # -----------------------------------------------------------------------
+      - id: get-current-item
+        script: |
+          #!/bin/bash
+          
+          ITEMS='${steps.load-backlog.output.prioritized_items}'
+          INDEX=${state.processed}
+          
+          CURRENT_ITEM=$(echo "$ITEMS" | jq ".[$INDEX]")
+          ITEM_ID=$(echo "$CURRENT_ITEM" | jq -r '.id')
+          TITLE=$(echo "$CURRENT_ITEM" | jq -r '.title')
+          ROOT_CAUSE=$(echo "$CURRENT_ITEM" | jq -r '.root_cause')
+          SCORE=$(echo "$CURRENT_ITEM" | jq -r '.score')
+          
+          echo "CURRENT_ITEM_ID=$ITEM_ID"
+          echo "CURRENT_TITLE=$TITLE"
+          echo "CURRENT_ROOT_CAUSE=$ROOT_CAUSE"
+          echo "CURRENT_SCORE=$SCORE"
+          
+          # 保存完整建议到文件
+          echo "$CURRENT_ITEM" > /tmp/current-evolution-item.json
+      
+      # -----------------------------------------------------------------------
+      # 2.2 投票决策
+      # -----------------------------------------------------------------------
+      - id: create-voting-session
+        step: governance/create-voting-session
+        input:
+          topic: "进化建议: ${steps.get-current-item.output.CURRENT_TITLE}"
+          related_item_id: "${steps.get-current-item.output.CURRENT_ITEM_ID}"
+          related_item_type: "evolution"
+          participants:
+            - id: auditor
+              type: role
+              weight: normal
+            - id: architect
+              type: role
+              weight: normal
+            - id: owner
+              type: user
+              weight: veto
+          config:
+            method: absolute_majority
+            threshold: 50
+            duration_minutes: 60
+        output:
+          - voting_session_id
+      
+      - id: collect-votes
+        step: governance/multi-stance-review
+        input:
+          artifact_type: "evolution-item"
+          artifact_content: "${steps.get-current-item.output.CURRENT_ITEM}"
+          stances: "${inputs.stances}"
+          aggregation_method: "voting"
+          voting_session_id: "${steps.create-voting-session.output.voting_session_id}"
+        output:
+          - opinions
+          - votes
+      
+      - id: tally-votes
+        step: governance/vote-tally
+        input:
+          voting_session_id: "${steps.create-voting-session.output.voting_session_id}"
+          method: absolute_majority
+          threshold: 50
+        output:
+          - decision
+          - statistics
+          - checks
+      
+      # -----------------------------------------------------------------------
+      # 2.3 处理决策
+      # -----------------------------------------------------------------------
+      - id: handle-decision
+        condition: "${steps.tally-votes.output.decision} == 'approved'"
+        step: evolution/implement
+        input:
+          project_path: "${inputs.project_path}"
+          evolution_item_id: "${steps.get-current-item.output.CURRENT_ITEM_ID}"
+          auto_verify: true
+        output:
+          - status
+          - changes
+          - verification_result
+          - commit_hash
+      
+      # -----------------------------------------------------------------------
+      # 2.4 效果追踪（高风险）
+      # -----------------------------------------------------------------------
+      - id: start-effect-tracking
+        condition: "${steps.handle-decision.output.status} == 'implemented'"
+        step: governance/track-effect
+        input:
+          evolution_item_id: "${steps.get-current-item.output.CURRENT_ITEM_ID}"
+          project_path: "${inputs.project_path}"
+          implementation_commit: "${steps.handle-decision.output.commit_hash}"
+          risk_level: "${steps.get-current-item.output.CURRENT_SEVERITY == 'critical' ? 'high' : 'medium'}"
+          tracking_duration_hours: 24
+        output:
+          - tracking_id
+          - status
+          - rollback_decision
+      
+      # -----------------------------------------------------------------------
+      # 2.4 更新状态
+      # -----------------------------------------------------------------------
+      - id: update-backlog-status
+        script: |
+          #!/bin/bash
+          cd "${inputs.project_path}"
+          
+          ITEM_ID="${steps.get-current-item.output.CURRENT_ITEM_ID}"
+          DECISION="${steps.multi-stance-review.output.final_decision}"
+          
+          # 更新 evolution-backlog.yml
+          if [ -f ".agent/evolution-backlog.yml" ]; then
+            # 使用 yq 或 python 更新状态
+            python3 << PYEOF
+          import yaml
+          
+          with open('.agent/evolution-backlog.yml', 'r') as f:
+            data = yaml.safe_load(f)
+          
+          for item in data.get('items', []):
+            if item['id'] == '$ITEM_ID':
+              if '$DECISION' == 'approved':
+                item['status'] = 'implemented'
+              else:
+                item['status'] = 'rejected'
+              item['reviewed_at'] = '$(date -Iseconds)'
+              item['review_decision'] = '$DECISION'
+              break
+          
+          with open('.agent/evolution-backlog.yml', 'w') as f:
+            yaml.dump(data, f)
+          
+          print(f"Updated item $ITEM_ID to $DECISION")
+          PYEOF
+          fi
+      
+      # -----------------------------------------------------------------------
+      # 2.5 更新循环状态
+      # -----------------------------------------------------------------------
+      - id: update-loop-state
+        action: set_state
+        state:
+          processed: "${state.processed + 1}"
+          accepted: "${state.accepted + (steps.multi-stance-review.output.final_decision == 'approved' ? 1 : 0)}"
+          rejected: "${state.rejected + (steps.multi-stance-review.output.final_decision == 'rejected' ? 1 : 0)}"
+          implemented: "${state.implemented + (steps.handle-decision.output.status == 'implemented' ? 1 : 0)}"
+    
+    # 循环退出条件：处理完所有建议
+    loop_condition: "${state.processed} < ${steps.load-backlog.output.statistics.total_items}"
+
+  # ==========================================================================
+  # Phase 3: 生成报告
+  # ==========================================================================
+  - id: phase-3-report
+    phase: 生成报告
+  
+  - id: generate-evolution-report
+    script: |
+      #!/bin/bash
+      
+      REPORT_PATH="${inputs.project_path}/.agent/evolution-report.md"
+      
+      cat > "$REPORT_PATH" << MDEOF
+      # 系统进化报告
+      
+      ## 概览
+      
+      | 指标 | 值 |
+      |------|-----|
+      | 处理建议数 | ${steps.review-loop.output.processed} |
+      | 批准数 | ${steps.review-loop.output.accepted} |
+      | 拒绝数 | ${steps.review-loop.output.rejected} |
+      | 已实现数 | ${steps.review-loop.output.implemented} |
+      
+      ## 待处理统计
+      
+      | 严重性 | 数量 |
+      |--------|------|
+      | Critical | ${steps.load-backlog.output.statistics.by_severity.critical || 0} |
+      | High | ${steps.load-backlog.output.statistics.by_severity.high || 0} |
+      | Medium | ${steps.load-backlog.output.statistics.by_severity.medium || 0} |
+      | Low | ${steps.load-backlog.output.statistics.by_severity.low || 0} |
+      
+      ## 根本原因分布
+      
+      | 原因类型 | 数量 |
+      |----------|------|
+      | capability_missing | ${steps.load-backlog.output.statistics.by_root_cause.capability_missing || 0} |
+      | context_insufficient | ${steps.load-backlog.output.statistics.by_root_cause.context_insufficient || 0} |
+      | constraint_too_strict | ${steps.load-backlog.output.statistics.by_root_cause.constraint_too_strict || 0} |
+      | workflow_defect | ${steps.load-backlog.output.statistics.by_root_cause.workflow_defect || 0} |
+      | agent_limitation | ${steps.load-backlog.output.statistics.by_root_cause.agent_limitation || 0} |
+      
+      ---
+      
+      报告时间: $(date -Iseconds)
+      MDEOF
+      
+      echo "✅ 报告已生成: $REPORT_PATH"
+
+  # ==========================================================================
+  # Phase 4: 提交变更
+  # ==========================================================================
+  - id: phase-4-commit
+    phase: 提交变更
+    condition: "${steps.review-loop.output.implemented} > 0"
+  
+  - id: commit-evolution-changes
+    script: |
+      #!/bin/bash
+      cd "${inputs.project_path}"
+      
+      # 检查是否有变更
+      if [ -n "$(git status --porcelain)" ]; then
+        git add .agent/
+        git commit -m "evolution: 系统进化 - 处理 ${steps.review-loop.output.processed} 条建议，实现 ${steps.review-loop.output.implemented} 条"
+        
+        echo "✅ 已提交变更"
+      else
+        echo "无变更需要提交"
+      fi
+
+# 输出
+outputs:
+  - name: evolution_report
+    type: file
+    path: "${inputs.project_path}/.agent/evolution-report.md"
+  
+  - name: processed
+    type: number
+    description: 处理的建议数
+  
+  - name: accepted
+    type: number
+    description: 批准的建议数
+  
+  - name: implemented
+    type: number
+    description: 已实现的建议数
+  
+  - name: rejected
+    type: number
+    description: 拒绝的建议数
+
+# 超时配置
+timeout: 3600  # 1 小时
+
+# 重试配置
+retry:
+  maxAttempts: 1
+
+# 标签
+tags:
+  - evolution
+  - self-improvement
+  - capability
+  - governance
+
+# 分类
+category: governance

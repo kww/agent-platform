@@ -1,0 +1,489 @@
+# wf-review.yml - 统一审核工作流
+# ============================================================================
+# 工作流类型: 审核治理
+# 触发方式: /wf-review <artifact_path> [--type architecture|code|proposal|decision]
+# 用途: 多立场审核机制，自动选择审核立场
+# ============================================================================
+#
+# 自动立场选择：
+# - architecture → architect + security + performance + critic + decider
+# - code → reviewer + critic + decider
+# - proposal → supporter + critic + decider
+# - decision → critic + supporter + decider
+# - 默认 → critic + supporter + decider
+#
+# 核心机制：
+# - 多立场并行审核
+# - 加权汇聚意见
+# - 快速否决机制（critic 可直接 veto）
+# ============================================================================
+
+id: wf-review
+stage: verify
+name: 审核工作流
+description: |
+  统一审核工作流（多立场审核）
+  
+  自动根据审核对象类型选择立场：
+  - **architecture**: 架构师 + 安全专家 + 性能专家 + Critic + Decider
+  - **code**: Reviewer + Critic + Decider
+  - **proposal**: Supporter + Critic + Decider
+  - **decision**: Critic + Supporter + Decider
+  
+  核心机制：
+  - 多立场并行审核
+  - 加权汇聚意见
+  - 快速否决机制（critic 可直接 veto）
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 架构设计审核 → /wf-review architecture.md
+  - 代码变更审核 → /wf-review src/login.ts
+  - 方案提案审核 → /wf-review proposal.md
+  - 决策记录审核 → /wf-review decision.md
+  
+  ⚠️ **不适合**：
+  - 项目质量审计 → 用 wf-audit
+  - 测试验证 → 用 wf-test
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "📋"
+  keywords: [审核, review, 审查, 架构审核, 代码审查]
+  examples:
+    - input: "/wf-review architecture.md"
+      output: "架构审核：architect + security + performance + critic + decider"
+    - input: "/wf-review src/login.ts"
+      output: "代码审核：reviewer + critic + decider"
+    - input: "/wf-review proposal.md"
+      output: "方案审核：supporter + critic + decider"
+
+# 输入参数
+inputs:
+  - name: artifact_path
+    type: string
+    required: true
+    description: 审核对象文件路径
+  
+  - name: artifact_type
+    type: string
+    required: false
+    default: auto
+    enum: [auto, architecture, code, proposal, decision, capability]
+    description: |
+      审核对象类型：
+      - auto: 自动判断（根据文件名/路径）
+      - architecture: 架构设计文档
+      - code: 代码文件
+      - proposal: 方案提案
+      - decision: 决策记录
+      - capability: 能力描述
+  
+  - name: stances
+    type: array
+    required: false
+    description: 自定义审核立场列表（不指定则根据 artifact_type 自动选择）
+  
+  - name: aggregation_method
+    type: string
+    required: false
+    default: weighted
+    enum: [consensus, majority, weighted, decider]
+    description: 意见汇聚方式
+  
+  - name: review_criteria
+    type: array
+    required: false
+    description: 自定义审核标准
+  
+  - name: project_context
+    type: object
+    required: false
+    description: 项目上下文信息（架构审核时使用）
+  
+  - name: focus_areas
+    type: array
+    required: false
+    default: ["security", "performance", "scalability", "maintainability"]
+    description: 重点关注领域（架构审核时使用）
+
+# 阶段定义
+phases:
+  - id: prepare
+    name: 准备阶段
+    parallel: false
+  - id: review
+    name: 审核阶段
+    parallel: true
+  - id: aggregate
+    name: 汇聚阶段
+    parallel: false
+  - id: decide
+    name: 决策阶段
+    parallel: false
+  - id: output
+    name: 输出阶段
+    parallel: false
+
+# 执行步骤
+steps:
+  # ==========================================================================
+  # Phase 1: 准备阶段
+  # ==========================================================================
+  - id: phase-1-prepare
+    phase: 准备阶段
+  
+  # 1.1 自动判断 artifact_type
+  - id: detect-artifact-type
+    condition: "${inputs.artifact_type} == 'auto'"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        ARTIFACT_PATH="${inputs.artifact_path}"
+        
+        # 根据文件名/路径判断类型
+        if [[ "$ARTIFACT_PATH" =~ architecture|架构 ]]; then
+          echo "artifact_type=architecture"
+        elif [[ "$ARTIFACT_PATH" =~ \.(ts|js|py|go|java|rs)$ ]]; then
+          echo "artifact_type=code"
+        elif [[ "$ARTIFACT_PATH" =~ proposal|方案|proposal ]]; then
+          echo "artifact_type=proposal"
+        elif [[ "$ARTIFACT_PATH" =~ decision|决策|ADR ]]; then
+          echo "artifact_type=decision"
+        else
+          echo "artifact_type=decision"  # 默认
+        fi
+    output: detected_type
+  
+  # 1.2 确定最终类型
+  - id: set-artifact-type
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        if [ "${inputs.artifact_type}" = "auto" ]; then
+          echo "final_type=${steps.detect-artifact-type.detected_type}"
+        else
+          echo "final_type=${inputs.artifact_type}"
+        fi
+    output: final_type
+  
+  # 1.3 自动选择立场
+  - id: select-stances
+    condition: "${inputs.stances} == null"
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        TYPE="${steps.set-artifact-type.final_type}"
+        
+        case "$TYPE" in
+          architecture)
+            echo "stances=[architect,security,performance,critic,decider]"
+            ;;
+          code)
+            echo "stances=[reviewer,critic,decider]"
+            ;;
+          proposal)
+            echo "stances=[supporter,critic,decider]"
+            ;;
+          *)
+            echo "stances=[critic,supporter,decider]"
+            ;;
+        esac
+    output: selected_stances
+  
+  # 1.4 加载审核对象
+  - id: load-artifact
+    step: file/read
+    input:
+      path: "${inputs.artifact_path}"
+    output: artifact_content
+  
+  # 1.5 准备审核内容
+  - id: prepare-content
+    step: governance/prepare-artifact
+    input:
+      artifact_type: "${steps.set-artifact-type.final_type}"
+      content: "${steps.load-artifact.artifact_content}"
+      context: "${inputs.project_context}"
+
+  # ==========================================================================
+  # Phase 2: 审核阶段（多立场并行）
+  # ==========================================================================
+  - id: phase-2-review
+    phase: 审核阶段
+  
+  # ============================
+  # Architecture 专业立场（并行）
+  # ============================
+  - id: architect-review
+    parallel: true
+    condition: "${steps.set-artifact-type.final_type} == 'architecture'"
+    step: governance/stance-review
+    input:
+      stance_id: architect
+      artifact_type: architecture
+      artifact_content: "${steps.prepare-content.output}"
+      review_criteria:
+        - 架构完整性
+        - 模块划分合理性
+        - 扩展性设计
+        - 技术选型合理性
+    output: architect_opinion
+  
+  - id: security-review
+    parallel: true
+    condition: "${steps.set-artifact-type.final_type} == 'architecture'"
+    step: governance/stance-review
+    input:
+      stance_id: security
+      artifact_type: architecture
+      artifact_content: "${steps.prepare-content.output}"
+      review_criteria:
+        - 认证授权机制
+        - 数据安全
+        - 接口安全
+        - 敏感信息保护
+    output: security_opinion
+  
+  - id: performance-review
+    parallel: true
+    condition: "${steps.set-artifact-type.final_type} == 'architecture'"
+    step: governance/stance-review
+    input:
+      stance_id: performance
+      artifact_type: architecture
+      artifact_content: "${steps.prepare-content.output}"
+      review_criteria:
+        - 性能瓶颈点
+        - 缓存策略
+        - 数据库设计
+        - 并发处理
+    output: performance_opinion
+  
+  # ============================
+  # Code 审核立场（并行）
+  # ============================
+  - id: code-reviewer
+    parallel: true
+    condition: "${steps.set-artifact-type.final_type} == 'code'"
+    step: governance/stance-review
+    input:
+      stance_id: reviewer
+      artifact_type: code
+      artifact_content: "${steps.prepare-content.output}"
+      review_criteria:
+        - 代码质量
+        - 代码规范
+        - 最佳实践
+        - 可维护性
+    output: reviewer_opinion
+  
+  # ============================
+  # Proposal 审核立场（并行）
+  # ============================
+  - id: proposal-supporter
+    parallel: true
+    condition: "${steps.set-artifact-type.final_type} == 'proposal'"
+    step: governance/stance-review
+    input:
+      stance_id: supporter
+      artifact_type: proposal
+      artifact_content: "${steps.prepare-content.output}"
+      review_criteria:
+        - 方案可行性
+        - 投入产出比
+        - 实施路径清晰
+    output: supporter_opinion
+  
+  # ============================
+  # 通用立场（所有类型）
+  # ============================
+  - id: critic-review
+    step: governance/stance-review
+    input:
+      stance_id: critic
+      artifact_type: "${steps.set-artifact-type.final_type}"
+      artifact_content: "${steps.prepare-content.output}"
+      review_criteria:
+        - 假设是否合理
+        - 是否有遗漏风险
+        - 替代方案是否考虑
+      previous_opinions: "${phase-2-review.outputs}"
+    output: critic_opinion
+
+  # ==========================================================================
+  # Phase 3: 汇聚阶段
+  # ==========================================================================
+  - id: phase-3-aggregate
+    phase: 汇聚阶段
+  
+  - id: aggregate-opinions
+    step: governance/aggregate-opinions
+    input:
+      artifact_type: "${steps.set-artifact-type.final_type}"
+      opinions: "${phase-2-review.outputs}"
+      aggregation_method: "${inputs.aggregation_method}"
+    output: aggregated_result
+  
+  # ==========================================================================
+  # Phase 4: 决策阶段
+  # ==========================================================================
+  - id: phase-4-decide
+    phase: 决策阶段
+  
+  - id: decider-final
+    step: governance/stance-review
+    input:
+      stance_id: decider
+      artifact_type: "${steps.set-artifact-type.final_type}"
+      artifact_content: "${steps.prepare-content.output}"
+      previous_opinions: "${steps.aggregate-opinions.aggregated_result}"
+      review_criteria:
+        - 风险与收益平衡
+        - 资源约束
+        - 时间约束
+        - 团队能力匹配
+    output: final_decision
+  
+  # ==========================================================================
+  # Phase 5: 输出阶段
+  # ==========================================================================
+  - id: phase-5-output
+    phase: 输出阶段
+  
+  # 5.1 处理不同决策结果
+  - id: handle-approved
+    condition: "${steps.decider-final.verdict} == 'approved'"
+    steps:
+      - id: create-approval-document
+        step: governance/create-signed-document
+        input:
+          document_type: approval
+          content: "${steps.prepare-content.output}"
+          signers: "${phase-2-review.outputs}"
+          metadata:
+            artifact_type: "${steps.set-artifact-type.final_type}"
+            review_method: "${inputs.aggregation_method}"
+  
+  - id: handle-rejected
+    condition: "${steps.decider-final.verdict} == 'rejected'"
+    steps:
+      - id: create-rejection-document
+        step: governance/create-signed-document
+        input:
+          document_type: rejection
+          content: "${steps.prepare-content.output}"
+          signers: "${phase-2-review.outputs}"
+          metadata:
+            artifact_type: "${steps.set-artifact-type.final_type}"
+            rejection_reason: "${steps.decider-final.opinion}"
+  
+  - id: handle-changes-requested
+    condition: "${steps.decider-final.verdict} == 'changes_requested'"
+    steps:
+      - id: collect-issues
+        step: governance/collect-issues
+        input:
+          opinions: "${phase-2-review.outputs}"
+      
+      - id: create-change-request
+        step: governance/create-signed-document
+        input:
+          document_type: change_request
+          content: "${steps.prepare-content.output}"
+          signers: "${phase-2-review.outputs}"
+          metadata:
+            artifact_type: "${steps.set-artifact-type.final_type}"
+            issues: "${steps.collect-issues.issues}"
+            suggestions: "${steps.collect-issues.suggestions}"
+  
+  # 5.2 生成报告
+  - id: generate-report
+    step: governance/generate-review-report
+    input:
+      artifact_type: "${steps.set-artifact-type.final_type}"
+      final_decision: "${steps.decider-final.verdict}"
+      opinions: "${phase-2-review.outputs}"
+      statistics: "${steps.aggregate-opinions.statistics}"
+  
+  # 5.3 通知结果
+  - id: notify-result
+    tool: notification/notify
+    input:
+      channel: discord
+      message: |
+        📋 审核完成
+        
+        类型: ${steps.set-artifact-type.final_type}
+        结果: ${steps.decider-final.verdict}
+        
+        立场意见:
+        ${phase-2-review.outputs.summary}
+
+# 输出
+outputs:
+  - name: final_decision
+    type: string
+    description: 最终决策（approved/rejected/changes_requested）
+  
+  - name: artifact_type
+    type: string
+    description: 审核对象类型
+  
+  - name: reason
+    type: string
+    description: 决策理由
+  
+  - name: report
+    type: object
+    description: 审核报告
+  
+  - name: signed_document
+    type: object
+    description: 签署的审核文档
+  
+  - name: issues
+    type: object
+    description: 各立场发现的问题
+
+# 错误处理
+error_handling:
+  - error: VALIDATION_FAILED
+    action: fail
+    message: "审核对象验证失败"
+  
+  - error: REVIEW_TIMEOUT
+    action: continue
+    message: "审核超时，使用已有意见决策"
+
+# 超时设置
+timeout:
+  total: 900  # 15分钟（架构审核较复杂）
+  step: 180   # 单步骤3分钟
+
+# 并行执行配置
+parallel:
+  - architect-review
+  - security-review
+  - performance-review
+  - code-reviewer
+  - proposal-supporter
+  - critic-review
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 2.0.0
+  tags:
+    - governance
+    - review
+    - architecture
+    - code-review
+    - multi-stakeholder
+    - stance-isolation
+  documentation: /root/knowledge-base/projects/agent-studio/workflow-stance-integration.md

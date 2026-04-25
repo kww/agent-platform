@@ -1,0 +1,42 @@
+{
+  "name": "@dommaker/workflows",
+  "version": "0.0.1",
+  "description": "AI Agent 工作流定义仓库 - Tools, Steps, Workflows, Skills",
+  "main": "registry/index.json",
+  "files": [
+    "workflows",
+    "tools",
+    "contexts",
+    "templates",
+    "registry",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kww/agent-platform.git",
+    "directory": "packages/workflows"
+  },
+  "bugs": {
+    "url": "https://github.com/kww/agent-platform/issues"
+  },
+  "homepage": "https://github.com/kww/agent-platform#readme",
+  "keywords": [
+    "ai",
+    "agent",
+    "skills",
+    "workflows",
+    "tools",
+    "capabilities"
+  ],
+  "author": "kww",
+  "license": "MIT",
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "yaml": "^2.8.3"
+  }
+}

@@ -1,0 +1,54 @@
+# Monorepo 项目上下文
+
+type: monorepo
+
+structure:
+  - packages/
+  - apps/
+  - libs/
+
+tooling:
+  - pnpm
+  - turborepo
+  - nx
+  - lerna
+
+commonPackages:
+  - packages/shared
+  - packages/ui
+  - packages/utils
+  - packages/config
+
+commonApps:
+  - apps/web
+  - apps/api
+  - apps/docs
+
+patterns:
+  - "Shared packages"
+  - "Workspace dependencies"
+  - "Build caching"
+  - "Parallel builds"
+
+defaultPipelines:
+  frontend: frontend-monorepo
+  backend: backend-monorepo
+
+excludeDirs:
+  - node_modules
+  - dist
+  - build
+  - .turbo
+  - .nx
+
+bestPractices:
+  - "使用 workspace 协议引用内部包"
+  - "共享 tsconfig 和 eslint 配置"
+  - "使用 Turborepo 缓存加速构建"
+  - "独立版本管理"
+
+commonCommands:
+  build: "pnpm build"
+  test: "pnpm test"
+  lint: "pnpm lint"
+  dev: "pnpm dev"

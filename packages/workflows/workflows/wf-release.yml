@@ -1,0 +1,172 @@
+# wf-release.yml - 发布流程
+# ============================================================================
+# 工作流类型: 发布上线
+# 触发方式: /wf-release
+# Superpowers 整合: ✅ verify + finish
+#   - verification-before-completion
+#   - finishing-a-development-branch
+# ============================================================================
+
+id: wf-release
+stage: deploy
+name: 发布流程
+description: |
+  测试验证后发布到生产环境
+  
+  **可选**：启用 Long-Running Agents 约束检查，确保发布前项目符合规范。
+
+# 使用场景
+usageScenario: |
+  🎯 **适合场景**：
+  - 功能开发完成，准备上线
+  - 测试验证通过后的发布
+  - 生产环境部署
+  
+  ⚠️ **前置条件**：
+  - 代码已通过测试
+  - 已完成代码审查
+  
+  📝 **流程**：
+  1. [可选] Long-Running 约束检查
+  2. 运行测试验证
+  3. 创建发布分支/标签
+  4. 部署到生产环境
+  
+  💡 **约束检查**：
+  - 启用 `enable_constraints` 检查 feature_list、功能拆解、progress
+  - 适用于使用 Long-Running Agents 模式的项目
+
+# OpenClaw 元数据
+openclaw:
+  userInvocable: true
+  emoji: "🚀"
+  keywords: [发布, 上线, 部署]
+
+# Superpowers 整合
+superpowers:
+  - verification-before-completion
+  - finishing-a-development-branch
+
+# 未整合原因
+not_integrated:
+  brainstorming: "发布阶段不需要头脑风暴"
+  writing-plans: "发布阶段不需要计划编写"
+  using-git-worktrees: "发布在已有代码基础上进行"
+  subagent-driven-development: "发布通常单人完成"
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目目录路径
+  
+  - name: requirement
+    type: string
+    required: false
+    description: 发布说明（可选）
+  
+  - name: environment
+    type: string
+    required: false
+    description: 发布环境（staging/production）
+    default: "staging"
+  
+  - name: enable_constraints
+    type: boolean
+    required: false
+    default: false
+    description: 启用 Long-Running 约束检查（发布前验证）
+  
+  - name: constraint_level
+    type: string
+    required: false
+    default: guideline
+    enum: [iron_law, guideline, tip]
+    description: 约束级别
+
+# 工作流步骤
+steps:
+  # Step 0: 约束检查（可选）
+  - id: constraint-check
+    condition: "${inputs.enable_constraints} == true"
+    step: wf-constraint
+    input:
+      project_path: "${inputs.project_path}"
+      constraint_level: "${inputs.constraint_level}"
+      quick: true
+    on_fail: continue
+    output: constraint_result
+  
+  # Step 1: 运行所有测试
+  - id: run-all-tests
+    step: quality/run-tests
+    input:
+      project_path: "{{inputs.project_path}}"
+      test_type: all
+    output: test-result.md
+  
+  # Step 2: 质量检查
+  - id: check-quality
+    step: quality/check-quality
+    input:
+      project_path: "{{inputs.project_path}}"
+    output: quality-report.md
+  
+  # Step 3: 验证完成（verification-before-completion）
+  - id: verify-completion
+    tool: verification/verify_completion
+    input:
+      claim: "all tests pass and ready for release"
+      command: "npm test && npm run build"
+      repo_path: "{{inputs.project_path}}"
+    output: verification_result
+  
+  # Step 4: 部署后端
+  - id: deploy-backend
+    condition: "{{inputs.environment}} == 'production'"
+    step: deploy/deploy-backend
+    input:
+      project_path: "{{inputs.project_path}}"
+      environment: "{{inputs.environment}}"
+    output: backend-deploy-result.md
+  
+  # Step 5: 部署前端
+  - id: deploy-frontend
+    condition: "{{inputs.environment}} == 'production'"
+    step: deploy/deploy-frontend
+    input:
+      project_path: "{{inputs.project_path}}"
+      environment: "{{inputs.environment}}"
+    output: frontend-deploy-result.md
+  
+  # Step 6: 提交发布（finishing-a-development-branch）
+  - id: commit-release
+    step: deploy/commit-push
+    input:
+      project_path: "{{inputs.project_path}}"
+      message: "release: {{inputs.requirement}}"
+      tag: true
+    output: commit_result
+
+# 输出
+outputs:
+  - test-result.md
+  - quality-report.md
+  - verification_result
+  - backend-deploy-result.md
+  - frontend-deploy-result.md
+  - commit_result
+
+# 铁律检查
+iron_laws:
+  - id: no_completion_without_verification
+    enforce_at: step-3
+    message: "发布前必须验证测试通过"
+
+# 发布选项（finishing-a-development-branch）
+release_options:
+  - merge_to_main
+  - create_tag
+  - push_to_remote
+  - cleanup_branch

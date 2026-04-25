@@ -1,0 +1,62 @@
+# FastAPI 项目上下文
+
+language: python
+framework: fastapi
+
+entryPoints:
+  - main.py
+  - app/main.py
+  - app.py
+
+commonPatterns:
+  - "Pydantic models"
+  - "Dependency injection"
+  - "APIRouter"
+  - "Background tasks"
+  - "WebSocket"
+
+excludeDirs:
+  - __pycache__
+  - .venv
+  - venv
+  - .pytest_cache
+
+testPatterns:
+  - "**/test_*.py"
+  - "**/tests/**"
+
+defaultPipelines:
+  backend: backend-fastapi
+  test: pytest-fastapi
+
+commonEndpoints:
+  - routers/
+  - api/
+  - routes/
+
+commonModels:
+  - models/
+  - schemas/
+  - app/models.py
+
+database:
+  - sqlalchemy
+  - tortoise-orm
+  - databases
+
+authentication:
+  - fastapi-security
+  - python-jose
+  - passlib
+
+bestPractices:
+  - "使用 Pydantic v2"
+  - "使用 dependency injection"
+  - "APIRouter 组织路由"
+  - "使用 lifespan 管理资源"
+
+commonDependencies:
+  - fastapi
+  - uvicorn
+  - pydantic
+  - python-multipart

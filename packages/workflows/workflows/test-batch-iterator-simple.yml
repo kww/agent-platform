@@ -1,0 +1,26 @@
+# test-batch-iterator-simple.yml - 简化测试
+id: test-batch-iterator-simple
+stage: develop
+name: 简化批次迭代测试
+version: 1.0.0
+
+inputs:
+  - name: items
+    type: array
+    default: ["item1", "item2", "item3"]
+
+steps:
+  - id: iterate-items
+    type: batch-iterator
+    source: "${inputs.items}"
+    batch_var: item
+    index_var: index
+    output: results
+    
+    steps:
+      - id: print-item
+        type: notification
+        message: "Processing item ${index}: ${item}"
+
+outputs:
+  - results

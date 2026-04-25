@@ -1,0 +1,103 @@
+# wf-dev/backlog-load.yml - Backlog 模式：加载 Feature
+# ============================================================================
+# 用途：从 backlog.yml 加载指定 feature
+# 输入：feature_id
+# 输出：feature 信息
+# ============================================================================
+
+id: wf-dev/backlog-load
+name: 加载 Feature
+description: |
+  从 backlog.yml 加载指定的 feature
+  
+  使用 backlog/list 步骤读取 feature
+
+category: wf-dev
+
+# 输入
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  feature_id:
+    type: string
+    description: Feature ID（如 FEAT-001）
+    required: true
+
+# 输出
+outputs:
+  - name: feature
+    type: object
+    description: Feature 对象
+  
+  - name: feature_title
+    type: string
+    description: Feature 标题
+  
+  - name: feature_description
+    type: string
+    description: Feature 描述
+  
+  - name: feature_priority
+    type: string
+    description: Feature 优先级
+
+# 步骤流程
+steps:
+  # 1. 从 backlog 读取
+  - id: load-from-backlog
+    step: backlog/list
+    input:
+      project_path: "${inputs.project_path}"
+      type: feature
+      filter_id: "${inputs.feature_id}"
+    output:
+      items
+      count
+  
+  # 2. 验证存在
+  - id: validate-exists
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        COUNT="${steps.load-from-backlog.count}"
+        FEATURE_ID="${inputs.feature_id}"
+        
+        if [ "$COUNT" -eq 0 ]; then
+          echo "❌ Feature 不存在: $FEATURE_ID"
+          exit 1
+        fi
+        
+        echo "✅ Feature 已找到: $FEATURE_ID"
+  
+  # 3. 提取信息
+  - id: extract-info
+    execute:
+      type: script
+      script: |
+        #!/bin/bash
+        FEATURE="${steps.load-from-backlog.items[0]}"
+        
+        # 提取字段
+        FEATURE_ID=$(echo "$FEATURE" | jq -r '.id')
+        FEATURE_TITLE=$(echo "$FEATURE" | jq -r '.title')
+        FEATURE_DESC=$(echo "$FEATURE" | jq -r '.description // .title')
+        FEATURE_PRIORITY=$(echo "$FEATURE" | jq -r '.priority // "medium"')
+        
+        echo "feature_id=$FEATURE_ID"
+        echo "feature_title=$FEATURE_TITLE"
+        echo "feature_description=$FEATURE_DESC"
+        echo "feature_priority=$FEATURE_PRIORITY"
+        
+        # 输出 JSON
+        echo ""
+        echo "feature=$(echo "$FEATURE" | jq -c .)"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags: [wf-dev, backlog, feature]
