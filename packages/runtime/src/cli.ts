@@ -39,12 +39,17 @@ import {
   getWorkflowStatus 
 } from './index';
 
+// 从 package.json 读取版本号
+import { readFileSync } from 'fs';
+import { join } from 'path';
+const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
+
 const program = new Command();
 
 program
   .name('agent-runtime')
   .description('AI Agent 工作流执行引擎')
-  .version('1.0.0');
+  .version(packageJson.version);
 
 // ============================================
 // 参数解析函数

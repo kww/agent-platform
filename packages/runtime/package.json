@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/runtime",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "AI Agent 工作流执行引擎 - npm 包 + CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
