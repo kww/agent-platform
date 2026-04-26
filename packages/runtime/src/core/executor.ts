@@ -15,6 +15,9 @@ import { spawnAgent, spawnWithRetry, getAgentTimeout, classifySpawnError } from 
 import { getStep } from './registry';
 import { ParallelExecutor, ParallelResult, FailStrategy, batchArray } from './parallel-executor';
 import { OutputManager, createOutputManager, lazyGetOutput } from './output-manager';
+
+// 🆕 AR-001: 引入 harness 约束检查
+import { checkConstraints, ConstraintViolationError } from '@dommaker/harness';
 import {
   loadState,
   saveState,
@@ -323,6 +326,36 @@ export async function executeWorkflow(
   };
   
   executions.set(executionId, result);
+  
+  // 🆕 AR-001: harness 约束检查（执行前）
+  try {
+    const constraintResult = await checkConstraints({
+      operation: 'workflow_execution',
+      projectPath: workdir,
+      sessionId: executionId,
+      taskDescription: workflowId,
+    });
+    
+    // Iron Law 违规会抛出异常，这里记录 Guidelines 警告
+    if (constraintResult.warningCount > 0) {
+      console.warn(`⚠️ harness Guidelines violations during workflow execution:`);
+      constraintResult.guidelines
+        .filter(g => !g.satisfied)
+        .forEach(g => console.warn(`  - ${g.id}: ${g.message}`));
+    }
+    
+    console.log(`✅ harness constraints passed for workflow ${workflowId}`);
+  } catch (e) {
+    if (e instanceof ConstraintViolationError) {
+      // Iron Law 违规 → 阻止执行
+      console.error(`❌ Iron Law violation: ${e.result.message}`);
+      result.status = 'failed';
+      result.error = `Iron Law violation: ${e.result.id} - ${e.result.message}`;
+      return result;
+    }
+    // 其他 harness 错误（如配置问题）→ 记录日志但不阻止
+    console.warn(`⚠️ harness check failed (non-blocking):`, e);
+  }
   
   // 🆕 创建历史压缩器（sessionHistory 管理）- 在 context 初始化之前
   const historyCompressorConfig: Partial<CompressionConfig> = {
