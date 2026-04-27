@@ -18,6 +18,14 @@ import { OutputManager, createOutputManager, lazyGetOutput } from './output-mana
 
 // 🆕 AR-001: 引入 harness 约束检查
 import { checkConstraints, ConstraintViolationError } from '@dommaker/harness';
+// 🆕 AR-003: 引入 harness CheckpointValidator
+import {
+  CheckpointValidator,
+  type Checkpoint,
+  type CheckpointCheck,
+  type CheckpointContext,
+  type CheckpointResult,
+} from '@dommaker/harness';
 import {
   loadState,
   saveState,
@@ -1378,52 +1386,140 @@ function checkRootCauseAnalysis(context: ExecutionContext): boolean {
 }
 
 /**
- * 验证检查点
+ * 验证检查点 (AR-003: 使用 harness CheckpointValidator)
+ *
+ * 支持 13 种检查类型：
+ * - file_exists, file_not_empty, file_contains, file_not_contains
+ * - command_success, command_output
+ * - output_contains, output_not_contains, output_matches
+ * - json_path, http_status, http_body, custom
+ *
+ * @see harness/src/core/validators/checkpoint.ts
  */
 async function verifyCheckpoint(checkpoint: any, context: ExecutionContext): Promise<boolean> {
-  // 如果 verify 是描述性文本（非文件路径），直接通过
-  if (checkpoint.verify) {
-    let verifyText = checkpoint.verify.trim();
-    
-    // 兼容旧格式: "file exists" → 提取 "file"
-    if (verifyText.endsWith(' exists')) {
-      verifyText = verifyText.replace(/ exists$/, '').trim();
-    }
-    
-    // 检查是否像文件路径（包含扩展名或以 / 开头）
-    const isFilePath = verifyText.includes('.') || verifyText.startsWith('/') || verifyText.startsWith('./');
-    
-    if (!isFilePath) {
-      // 描述性文本，直接通过
-      console.log(`  📋 Checkpoint: ${checkpoint.verify}`);
-      return true;
-    }
-    
-    // 文件路径检查 - 使用项目路径
-    const projectPath = context.inputs.project_path || context.workdir;
-    const fullPath = require('path').join(projectPath, verifyText);
-    return fs.existsSync(fullPath);
-  }
-  
-  if (checkpoint.check === 'file_exists' && checkpoint.path) {
-    const fs = require('fs');
-    const projectPath = context.inputs.project_path || context.workdir;
-    const fullPath = require('path').join(projectPath, checkpoint.path);
-    return fs.existsSync(fullPath);
-  }
-  
-  if (checkpoint.check === 'command_success' && checkpoint.command) {
-    const { execSync } = require('child_process');
-    const projectPath = context.inputs.project_path || context.workdir;
+  const projectPath = context.inputs.project_path || context.workdir;
+
+  // 🆕 如果 checkpoint 是 harness Checkpoint 格式（有 checks 数组）
+  if (checkpoint.checks && Array.isArray(checkpoint.checks)) {
+    const validator = CheckpointValidator.getInstance();
+    const checkpointContext: CheckpointContext = {
+      projectPath,
+      workdir: projectPath,
+      output: context.outputs,
+    };
+
     try {
-      execSync(checkpoint.command, { cwd: projectPath, stdio: 'pipe' });
-      return true;
-    } catch {
+      const result: CheckpointResult = await validator.validate(
+        checkpoint as Checkpoint,
+        checkpointContext
+      );
+
+      if (!result.passed) {
+        console.log(`  ❌ Checkpoint failed: ${result.message}`);
+        for (const check of result.checks) {
+          if (!check.passed) {
+            console.log(`    - ${check.checkId}: ${check.message}`);
+          }
+        }
+      } else {
+        console.log(`  ✅ Checkpoint passed: ${result.message}`);
+      }
+
+      return result.passed;
+    } catch (error) {
+      console.error(`  ⚠️ Checkpoint validation error: ${(error as Error).message}`);
       return false;
     }
   }
-  
-  return true;  // 默认通过
+
+  // 🔄 向后兼容：旧格式 checkpoint 转换为 harness 格式
+  // 支持：checkpoint.verify, checkpoint.check, checkpoint.type
+  const validator = CheckpointValidator.getInstance();
+  const convertedCheckpoint = convertLegacyCheckpoint(checkpoint);
+  const checkpointContext: CheckpointContext = {
+    projectPath,
+    workdir: projectPath,
+    output: context.outputs,
+  };
+
+  try {
+    const result = await validator.validate(convertedCheckpoint, checkpointContext);
+    return result.passed;
+  } catch (error) {
+    console.error(`  ⚠️ Checkpoint validation error: ${(error as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * 将旧格式 checkpoint 转换为 harness Checkpoint 格式
+ */
+function convertLegacyCheckpoint(legacy: any): Checkpoint {
+  const checks: Checkpoint['checks'] = [];
+
+  // 格式 1: checkpoint.verify = "描述性文本" 或 "文件路径"
+  if (legacy.verify) {
+    const verifyText = legacy.verify.trim();
+
+    // 检查是否像文件路径
+    const isFilePath = verifyText.includes('.') || verifyText.startsWith('/') || verifyText.startsWith('./');
+
+    if (isFilePath) {
+      checks.push({
+        id: 'legacy-verify',
+        type: 'file_exists',
+        config: { path: verifyText },
+      });
+    } else {
+      // 描述性文本，创建一个始终通过的 custom check
+      console.log(`  📋 Checkpoint (descriptive): ${legacy.verify}`);
+      // 直接返回一个通过的 checkpoint
+      return {
+        id: 'legacy-descriptive',
+        checks: [],
+      };
+    }
+  }
+
+  // 格式 2: checkpoint.check = "file_exists", checkpoint.path = "..."
+  if (legacy.check === 'file_exists' && legacy.path) {
+    checks.push({
+      id: 'legacy-file-exists',
+      type: 'file_exists',
+      config: { path: legacy.path },
+    });
+  }
+
+  // 格式 3: checkpoint.check = "command_success", checkpoint.command = "..."
+  if (legacy.check === 'command_success' && legacy.command) {
+    checks.push({
+      id: 'legacy-command-success',
+      type: 'command_success',
+      config: { command: legacy.command },
+    });
+  }
+
+  // 格式 4: checkpoint.type = "xxx"（另一种旧格式）
+  if (legacy.type && !legacy.check) {
+    checks.push({
+      id: 'legacy-type',
+      type: legacy.type as any,
+      config: {
+        path: legacy.path,
+        content: legacy.content,
+        expected: legacy.expected,
+        command: legacy.command,
+        pattern: legacy.pattern,
+        url: legacy.url,
+        jsonPath: legacy.jsonPath,
+      },
+    });
+  }
+
+  return {
+    id: legacy.id || 'converted-checkpoint',
+    checks,
+  };
 }
 
 /**
