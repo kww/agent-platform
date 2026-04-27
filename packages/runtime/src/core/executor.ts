@@ -1733,6 +1733,9 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
           const maxRetries = retryConfig?.maxAttempts || 3;
           const baseDelay = retryConfig?.initialDelay || 5000;
           
+          // 🆕 AS-014: 获取 system prompt（角色人设）
+          const systemPrompt = context.inputs.personality || context.inputs.systemPrompt;
+          
           try {
             // 🆕 使用智能重试
             const result = await spawnWithRetry({
@@ -1741,6 +1744,7 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
               workdir: projectPath,
               temperature,
               timeout: step.timeout,
+              systemPrompt,  // 🆕 AS-014: 传递角色人设
               onProgress: (message) => {
                 // 解析进度
                 progressParser.parseLine(message);

@@ -22,6 +22,9 @@ export interface SpawnOptions {
   temperature?: number;
   maxTokens?: number;
   
+  // 🆕 AS-014: System Prompt（角色人设）
+  systemPrompt?: string;
+  
   // 🆕 Phase 6: messages 传递
   messages?: Message[];     // 对话历史
   passHistory?: boolean;   // 是否传递历史（默认 false）
@@ -284,7 +287,7 @@ export async function spawnCodex(options: Omit<SpawnOptions, 'agent'>): Promise<
  * 启动 Claude Code Agent
  */
 export async function spawnClaudeCode(options: Omit<SpawnOptions, 'agent'>): Promise<SpawnResult> {
-  const { prompt, workdir, timeout, onProgress } = options;
+  const { prompt, workdir, timeout, onProgress, systemPrompt } = options;
   
   // 检查是否是 root 用户
   const isRoot = process.getuid?.() === 0;
@@ -294,15 +297,18 @@ export async function spawnClaudeCode(options: Omit<SpawnOptions, 'agent'>): Pro
     
     if (isRoot) {
       // root 用户：使用 Docker 方案
-      // claude-docker 脚本格式: claude-docker [项目路径] [prompt]
-      // 脚本内部已包含 --permission-mode bypassPermissions --print
+      // claude-docker 脚本格式: claude-docker [项目路径] [prompt] [--system-prompt xxx]
       const workdirPath = workdir || config.workdir;
       onProgress?.('🐳 使用 Docker 运行 Claude Code...\n');
       
-      proc = spawn('/root/.local/bin/claude-docker', [
-        workdirPath,
-        prompt
-      ], {
+      const args = [workdirPath, prompt];
+      
+      // 🆕 AS-014: 支持 system prompt
+      if (systemPrompt) {
+        args.push('--system-prompt', systemPrompt);
+      }
+      
+      proc = spawn('/root/.local/bin/claude-docker', args, {
         cwd: workdirPath,
         env: process.env,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -312,8 +318,14 @@ export async function spawnClaudeCode(options: Omit<SpawnOptions, 'agent'>): Pro
       const args = [
         '--print',
         '--permission-mode', 'bypassPermissions',
-        prompt
       ];
+      
+      // 🆕 AS-014: 支持 system prompt
+      if (systemPrompt) {
+        args.push('--system-prompt', systemPrompt);
+      }
+      
+      args.push(prompt);
       
       proc = spawn('claude', args, {
         cwd: workdir || config.workdir,
