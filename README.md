@@ -1,6 +1,20 @@
 # Agent Platform
 
-> Monorepo for AI Agent workflow execution - @dommaker/runtime + @dommaker/workflows
+> 约束驱动的 Agent 执行平台 — harness + runtime + workflows
+
+## 架构关系
+
+| 层 | 包 | 职责 |
+|---|---|------|
+| **约束层** | @dommaker/harness | Iron Laws + Gates + Checker |
+| **执行层** | @dommaker/runtime | Workflow 执行引擎 |
+| **定义层** | @dommaker/workflows | Workflow 数据包 |
+
+## 一句话
+
+**runtime 在关键节点调用 harness.check()，确保执行符合约束。**
+
+---
 
 ## Packages
 
