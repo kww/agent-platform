@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/workflows",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "AI Agent 工作流定义仓库 - Tools, Steps, Workflows, Skills",
   "main": "registry/index.json",
   "bin": {
