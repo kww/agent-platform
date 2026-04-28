@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["after 2am on Monday"],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["@dommaker/harness"],
+      "groupName": "harness",
+      "automerge": true,
+      "minimumReleaseAge": "1h"
+    }
+  ]
+}
