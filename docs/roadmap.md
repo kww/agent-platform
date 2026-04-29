@@ -23,8 +23,8 @@
 | ID | 任务 | 优先级 | 工作量 | 状态 |
 |----|------|:------:|:------:|:----:|
 | **AR-004** | ToolExecutor 引入（14工具）| P2 | 2h | ✅ 已实现 |
-| **AR-005** | 断点续传优化 | P3 | 3h | ⬜ |
-| **AR-006** | 并行执行优化 | P3 | 2h | ⬜ |
+| **AR-005** | 断点续传优化 | P3 | 3h | ✅ |
+| **AR-006** | 并行执行优化 | P3 | 2h | ✅ |
 
 ---
 
@@ -34,9 +34,9 @@
 
 | ID | 任务 | 优先级 | 工作量 | 状态 |
 |----|------|:------:|:------:|:----:|
-| **AR-007** | 多 Agent 协作（Orchestrator）| P3 | 4h | ⬜ |
-| **AR-008** | 进度追踪 API | P3 | 2h | ⬜ |
-| **AR-009** | 实时通知（WebSocket）| P3 | 3h | ⬜ |
+| **AR-007** | 多 Agent 协作（Orchestrator）| P3 | 4h | ✅ 已实现 |
+| **AR-008** | 进度追踪 API | P3 | 2h | ✅ 已实现 |
+| **AR-009** | 实时通知（WebSocket）| P3 | 3h | ✅ 已实现 |
 
 ---
 
@@ -48,7 +48,7 @@
 | **CheckpointValidator** | ✅ 已集成 | AR-003（13种检查）|
 | **PassesGate** | ✅ 已集成 | AR-002 |
 | **SecurityGate** | ❌ 未集成 | CLI only |
-| **ToolExecutor** | ⬜ 待集成 | AR-004（14工具）|
+| **ToolExecutor** | ✅ 已集成 | AR-004（14工具）|
 
 ---
 
@@ -56,9 +56,9 @@
 
 | 包 | 版本 | 说明 |
 |------|:----:|------|
-| @dommaker/runtime | 0.0.4 | 执行引擎 |
-| @dommaker/workflows | 0.0.5 | 工作流定义 |
-| @dommaker/harness | 0.7.7 | 约束框架（依赖）|
+| @dommaker/runtime | 0.0.5 | 执行引擎 |
+| @dommaker/workflows | 0.0.6 | 工作流定义 |
+| @dommaker/harness | 0.8.0 | 约束框架（依赖）|
 
 ---
 
@@ -68,3 +68,18 @@
 |------|---------|------|
 | **harness** | [README.md](../README.md) | 约束框架 |
 | **agent-studio** | [roadmap.md](../../agent-studio/docs/roadmap.md) | 业务平台 |
+
+---
+
+## 七、Phase 7：安全加固（2026-04-29）
+
+> 与 agent-studio 协同完成
+
+| ID | 任务 | 状态 |
+|----|------|:----:|
+| **SEC-004** | runtime 删除 API 权限保护 | ✅ |
+| **SEC-007** | 异地备份（rclone 配置）| ✅ |
+
+**改动**：
+- `packages/runtime/src/middleware/auth.ts` - JWT/API Key 认证
+- `packages/runtime/src/server.ts` - 3 个删除 API 保护
