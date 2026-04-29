@@ -142,6 +142,17 @@ export type {
 // 执行层错误类型（别名导出，避免与 harness ErrorType 冲突）
 export type { ErrorType as ExecutionErrorType } from './core/types';
 
+// 🆕 LLM 客户端导出
+export {
+  createLLMClient,
+  getDefaultLLMClient,
+} from './utils/llm-client';
+
+export type {
+  LLMClient,
+  LLMClientConfig,
+} from './utils/llm-client';
+
 // 🆕 P1: Token 追踪导出
 export {
   TokenTracker,

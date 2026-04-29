@@ -23,6 +23,7 @@ import {
 import { parseWorkflow } from './core/parser';
 import { config } from './utils/config';
 import { getMetrics } from './monitoring';
+import { requireNotGuest } from './middleware/auth';
 
 const app = express();
 
@@ -317,7 +318,7 @@ app.post('/api/executions/:id/steps/:stepId/retry', async (req: Request, res: Re
  * DELETE /api/executions/:id
  * 删除执行记录
  */
-app.delete('/api/executions/:id', async (req: Request, res: Response) => {
+app.delete('/api/executions/:id', requireNotGuest(), async (req: Request, res: Response) => {
   try {
     const executionId = req.params.id as string;
     const outputsDir = config.workdir;
@@ -1133,7 +1134,7 @@ app.post('/api/projects', async (req: Request, res: Response) => {
  * DELETE /api/projects/:id
  * 删除项目注册
  */
-app.delete('/api/projects/:id', async (req: Request, res: Response) => {
+app.delete('/api/projects/:id', requireNotGuest(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const projectsPath = path.join(config.workdir, '.projects.json');
@@ -1450,7 +1451,7 @@ app.post('/api/v1/mcp/servers', async (req: Request, res: Response) => {
  * DELETE /api/v1/mcp/servers/:id
  * 注销 MCP Server
  */
-app.delete('/api/v1/mcp/servers/:id', async (req: Request, res: Response) => {
+app.delete('/api/v1/mcp/servers/:id', requireNotGuest(), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     await mcpClientManager.unregisterServer(id);

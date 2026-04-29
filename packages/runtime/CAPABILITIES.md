@@ -595,6 +595,30 @@ import {
 } from '@dommaker/harness';
 ```
 
+## 中间件模块 (src/middleware/)
+
+| 模块 | 文件 | 功能 | 状态 | 最后修改 |
+|------|------|------|:----:|---------|
+| **认证中间件** | **auth.ts** | **JWT Token / API Key 验证** | ✅ | 2026-04-29 |
+
+### 认证中间件功能
+
+| 函数 | 说明 |
+|------|------|
+| `verifyToken()` | JWT Token 验证（与 studio 共享逻辑）|
+| `requireAuth()` | 要求认证（Token 或 API Key）|
+| `requireNotGuest()` | 要求非访客用户 |
+| `optionalAuth()` | 可选认证 |
+
+### 认证方式
+
+| 方式 | 适用场景 | Header |
+|------|---------|--------|
+| JWT Token | studio 前端 | `Authorization: Bearer <token>` |
+| API Key | CLI/脚本 | `X-API-Key: <key>` 或 `?apiKey=<key>` |
+
+---
+
 ## 执行器 (src/executors/)
 
 | 执行器 | 文件 | 功能 | 状态 |
