@@ -1,13 +1,18 @@
 /**
  * Tool 执行器
+ * SEC-006: 集成命令黑名单（使用 @dommaker/harness CommandGate）
  */
 
 import { parseTool } from '../core/parser';
 import { ExecutionContext, Tool } from '../core/types';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { CommandGate, createCommandGate } from '@dommaker/harness';
 
 const execAsync = promisify(exec);
+
+// 使用 harness CommandGate
+const commandGate = createCommandGate();
 
 /**
  * 执行 Tool
@@ -128,6 +133,7 @@ async function executeBuiltinTool(
 
 /**
  * 执行外部脚本
+ * SEC-006: 使用 harness CommandGate 检查命令黑名单
  */
 async function executeScript(
   tool: Tool,
@@ -142,6 +148,35 @@ async function executeScript(
   let script = tool.script;
   for (const [key, value] of Object.entries(input)) {
     script = script.replace(new RegExp(`\\$${key}`, 'g'), String(value));
+  }
+  
+  // SEC-006: 使用 harness CommandGate 检查命令
+  const gateResult = await commandGate.check(script);
+  
+  if (!gateResult.passed) {
+    context.eventEmitter.emit('tool.blocked', {
+      name: tool.name,
+      script,
+      blocked: gateResult.details?.blocked,
+    });
+    throw new Error(`命令被黑名单拦截:\n${gateResult.message}`);
+  }
+  
+  // 记录警告和审计
+  if (gateResult.details && gateResult.details.warnings?.length > 0) {
+    context.eventEmitter.emit('tool.warning', {
+      name: tool.name,
+      script,
+      warnings: gateResult.details.warnings,
+    });
+  }
+  
+  if (gateResult.details && gateResult.details.audits?.length > 0) {
+    context.eventEmitter.emit('tool.audit', {
+      name: tool.name,
+      script,
+      audits: gateResult.details.audits,
+    });
   }
   
   const { stdout, stderr } = await execAsync(script, {

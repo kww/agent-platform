@@ -477,6 +477,23 @@ export type {
 } from './core/risk-assessor';
 
 // ============================================
+// 🆕 SEC-006: 命令黑名单导出（从 @dommaker/harness）
+// ============================================
+
+export {
+  CommandGate,
+  createCommandGate,
+  isCommandAllowed,
+  getCommandRiskLevel,
+  DEFAULT_COMMAND_BLACKLIST,
+} from '@dommaker/harness';
+
+export type {
+  CommandBlacklistRule,
+  CommandGateConfig,
+} from '@dommaker/harness';
+
+// ============================================
 // 🆕 角色系统导出
 // ============================================
 

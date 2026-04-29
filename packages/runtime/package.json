@@ -44,7 +44,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@dommaker/harness": "^0.8.0",
+    "@dommaker/harness": "^0.8.1",
     "@dommaker/workflows": "^0.0.1",
     "chalk": "^4.1.2",
     "js-yaml": "^4.1.0",
