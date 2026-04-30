@@ -4,6 +4,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { execSync } from 'child_process';
+import { v4 as uuidv4 } from 'uuid';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { executeWorkflow, getWorkflowStatus } from './core/executor';
@@ -35,54 +37,58 @@ app.use(express.json());
 const runningExecutions = new Map<string, any>();
 
 /**
+ * 根据 executionId 查找执行目录和状态
+ */
+function findExecutionDir(executionId: string): { dir: string; statePath: string; state: any } | null {
+  const outputsDir = config.workdir;
+  if (!fs.existsSync(outputsDir)) return null;
+
+  const dirs = fs.readdirSync(outputsDir);
+  for (const dir of dirs) {
+    const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
+    if (fs.existsSync(statePath)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+        if (state.executionId === executionId) {
+          return { dir, statePath, state };
+        }
+      } catch {
+        // 跳过损坏的状态文件
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * POST /api/executions/:id/stop
  * 停止执行
  */
 app.post('/api/executions/:id/stop', async (req: Request, res: Response) => {
   try {
     const executionId = req.params.id as string;
-    
-    // 先检查内存中的运行上下文
     const execContext = runningExecutions.get(executionId);
-    
-    // 查找状态文件
-    const outputsDir = config.workdir;
-    const dirs = fs.readdirSync(outputsDir);
-    let found = false;
-    let currentStatus = '';
-    
-    for (const dir of dirs) {
-      const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-        if (state.executionId === executionId) {
-          found = true;
-          currentStatus = state.status;
-          
-          // 只有运行中、等待中、暂停中的才能停止
-          if (!['running', 'pending', 'paused'].includes(state.status)) {
-            return res.status(400).json({ error: `Execution is ${state.status}, cannot stop` });
-          }
-          
-          // 更新状态
-          state.status = 'stopped';
-          state.completedAt = new Date().toISOString();
-          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-          break;
-        }
-      }
-    }
-    
+    const found = findExecutionDir(executionId);
+
     if (!found) {
       return res.status(404).json({ error: 'Execution not found' });
     }
-    
-    // 如果有内存上下文，也标记停止
+
+    const { state, statePath } = found;
+    if (!['running', 'pending', 'paused'].includes(state.status)) {
+      return res.status(400).json({ error: `Execution is ${state.status}, cannot stop` });
+    }
+
+    const previousStatus = state.status;
+    state.status = 'stopped';
+    state.completedAt = new Date().toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
     if (execContext) {
       execContext.stopped = true;
     }
-    
-    res.json({ success: true, status: 'stopped', previousStatus: currentStatus });
+
+    res.json({ success: true, status: 'stopped', previousStatus });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -95,40 +101,23 @@ app.post('/api/executions/:id/stop', async (req: Request, res: Response) => {
 app.post('/api/executions/:id/pause', async (req: Request, res: Response) => {
   try {
     const executionId = req.params.id as string;
-    
-    // 查找状态文件
-    const outputsDir = config.workdir;
-    const dirs = fs.readdirSync(outputsDir);
-    let found = false;
-    let currentStatus = '';
-    
-    for (const dir of dirs) {
-      const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-        if (state.executionId === executionId) {
-          found = true;
-          currentStatus = state.status;
-          
-          // 只有运行中的才能暂停
-          if (state.status !== 'running') {
-            return res.status(400).json({ error: `Execution is ${state.status}, cannot pause` });
-          }
-          
-          // 更新状态
-          state.status = 'paused';
-          state.pausedAt = new Date().toISOString();
-          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-          break;
-        }
-      }
-    }
-    
+    const found = findExecutionDir(executionId);
+
     if (!found) {
       return res.status(404).json({ error: 'Execution not found' });
     }
-    
-    res.json({ success: true, status: 'paused', previousStatus: currentStatus });
+
+    const { state, statePath } = found;
+    if (state.status !== 'running') {
+      return res.status(400).json({ error: `Execution is ${state.status}, cannot pause` });
+    }
+
+    const previousStatus = state.status;
+    state.status = 'paused';
+    state.pausedAt = new Date().toISOString();
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    res.json({ success: true, status: 'paused', previousStatus });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -141,41 +130,24 @@ app.post('/api/executions/:id/pause', async (req: Request, res: Response) => {
 app.post('/api/executions/:id/resume', async (req: Request, res: Response) => {
   try {
     const executionId = req.params.id as string;
-    
-    // 查找状态文件
-    const outputsDir = config.workdir;
-    const dirs = fs.readdirSync(outputsDir);
-    let found = false;
-    let currentStatus = '';
-    
-    for (const dir of dirs) {
-      const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-        if (state.executionId === executionId) {
-          found = true;
-          currentStatus = state.status;
-          
-          // 只有暂停或等待中的才能恢复
-          if (!['paused', 'pending'].includes(state.status)) {
-            return res.status(400).json({ error: `Execution is ${state.status}, cannot resume` });
-          }
-          
-          // 更新状态
-          state.status = 'running';
-          state.resumedAt = new Date().toISOString();
-          delete state.pausedAt;
-          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-          break;
-        }
-      }
-    }
-    
+    const found = findExecutionDir(executionId);
+
     if (!found) {
       return res.status(404).json({ error: 'Execution not found' });
     }
-    
-    res.json({ success: true, status: 'running', previousStatus: currentStatus });
+
+    const { state, statePath } = found;
+    if (!['paused', 'pending'].includes(state.status)) {
+      return res.status(400).json({ error: `Execution is ${state.status}, cannot resume` });
+    }
+
+    const previousStatus = state.status;
+    state.status = 'running';
+    state.resumedAt = new Date().toISOString();
+    delete state.pausedAt;
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    res.json({ success: true, status: 'running', previousStatus });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -230,30 +202,13 @@ app.post('/api/executions/:id/steps/:stepId/retry', async (req: Request, res: Re
   try {
     const executionId = req.params.id as string;
     const stepId = req.params.stepId as string;
-    const outputsDir = config.workdir;
-    
-    // 查找执行状态文件
-    const dirs = fs.readdirSync(outputsDir);
-    let statePath = '';
-    let state: any = null;
-    let execDir = '';
-    
-    for (const dir of dirs) {
-      const sp = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
-      if (fs.existsSync(sp)) {
-        const s = JSON.parse(fs.readFileSync(sp, 'utf-8'));
-        if (s.executionId === executionId) {
-          statePath = sp;
-          state = s;
-          execDir = dir;
-          break;
-        }
-      }
-    }
-    
-    if (!state) {
+    const found = findExecutionDir(executionId);
+
+    if (!found) {
       return res.status(404).json({ error: 'Execution not found' });
     }
+
+    const { state, statePath, dir: execDir } = found;
     
     // 检查步骤是否存在
     if (!state.steps[stepId]) {
@@ -292,7 +247,7 @@ app.post('/api/executions/:id/steps/:stepId/retry', async (req: Request, res: Re
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
     
     // 触发重新执行（异步）
-    const workdir = path.join(outputsDir, execDir);
+    const workdir = path.join(config.workdir, execDir);
     executeWorkflow(state.workflowId, state.inputs, {
       workdir,
       resume: true,
@@ -321,50 +276,26 @@ app.post('/api/executions/:id/steps/:stepId/retry', async (req: Request, res: Re
 app.delete('/api/executions/:id', requireNotGuest(), async (req: Request, res: Response) => {
   try {
     const executionId = req.params.id as string;
-    const outputsDir = config.workdir;
-    
-    // 查找执行目录
-    const dirs = fs.readdirSync(outputsDir);
-    let found = false;
-    let execDir = '';
-    
-    for (const dir of dirs) {
-      const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-        if (state.executionId === executionId) {
-          // 检查是否正在运行
-          if (state.status === 'running') {
-            return res.status(400).json({ error: 'Cannot delete running execution. Stop it first.' });
-          }
-          found = true;
-          execDir = dir;
-          break;
-        }
-      }
-    }
-    
+    const found = findExecutionDir(executionId);
+
     if (!found) {
       return res.status(404).json({ error: 'Execution not found' });
     }
-    
-    // 安全检查：确保目录名有效
-    if (!execDir || execDir.includes('..') || execDir.startsWith('/')) {
-      return res.status(400).json({ error: 'Invalid execution directory' });
+
+    const { state, dir: execDir } = found;
+    if (state.status === 'running') {
+      return res.status(400).json({ error: 'Cannot delete running execution. Stop it first.' });
     }
-    
-    // 删除整个目录
+
+    const outputsDir = config.workdir;
     const fullPath = path.join(outputsDir, execDir);
-    
-    // 再次确认路径在 outputsDir 下面（防止目录遍历）
     const resolvedPath = path.resolve(fullPath);
     const resolvedOutputs = path.resolve(outputsDir);
     if (!resolvedPath.startsWith(resolvedOutputs + path.sep)) {
       return res.status(400).json({ error: 'Invalid path: outside outputs directory' });
     }
-    
+
     fs.rmSync(fullPath, { recursive: true, force: true });
-    
     res.json({ success: true, message: 'Execution deleted', deletedPath: execDir });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
@@ -410,7 +341,7 @@ async function executeWorkflowHandler(req: Request, res: Response) {
   const studioUrl = process.env.AGENT_STUDIO_URL || 'http://localhost:13101';
   
   // 预先生成 executionId，用于事件推送
-  const executionId = require('uuid').v4();
+  const executionId = uuidv4();
   
   // 存储执行上下文
   runningExecutions.set(executionId, { stopped: false });
@@ -499,7 +430,7 @@ app.post('/api/execute', async (req: Request, res: Response) => {
     const studioUrl = process.env.AGENT_STUDIO_URL || 'http://localhost:13101';
     
     // 预先生成 executionId，用于事件推送
-    const executionId = require('uuid').v4();
+    const executionId = uuidv4();
     
     // 异步执行（带事件回调）
     await executeWorkflowAsync(workflow, inputs || {}, {
@@ -573,28 +504,15 @@ app.post('/api/execute', async (req: Request, res: Response) => {
  */
 app.get('/api/executions/:id', async (req: Request, res: Response) => {
   try {
-    const executionId = req.params.id;
+    const executionId = req.params.id as string;
     const outputsDir = config.workdir;
-    
-    // 查找执行目录
-    const dirs = fs.readdirSync(outputsDir)
-      .filter(d => fs.statSync(path.join(outputsDir, d)).isDirectory());
-    
-    let execDir: string | null = null;
-    
-    for (const dir of dirs) {
-      const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-        if (state.executionId === executionId) {
-          execDir = dir;
-          break;
-        }
-      }
-    }
-    
+    const found = findExecutionDir(executionId);
+
+    let execDir: string | null = found?.dir || null;
+
     if (!execDir) {
-      // 尝试直接用目录名查找
+      const dirs = fs.readdirSync(outputsDir)
+        .filter(d => fs.statSync(path.join(outputsDir, d)).isDirectory());
       const idStr = Array.isArray(executionId) ? executionId[0] : executionId;
       const directDir = dirs.find(d => d.includes(idStr.substring(0, 8)));
       if (directDir) {
@@ -874,25 +792,22 @@ app.get('/api/steps/stats', async (req: Request, res: Response) => {
 });
 
 /**
- * 加密工具 - AES 加密敏感信息
- * 使用环境变量中的加密密钥
+ * 编码工具 - Base64 编码敏感信息用于存储混淆
+ * 注意：这不是加密，仅为防止明文泄露。需要真正的加密请使用 CONFIG_ENCRYPTION_KEY
  */
-function encryptSensitive(value: string): string {
+function encodeForStorage(value: string): string {
   const key = process.env.CONFIG_ENCRYPTION_KEY;
   if (!key || !value) return value;
-  
-  // 简单对称加密（base64 + 简单密钥混淆）
-  // 对于开发阶段足够安全，防止明文泄露
+
   const buff = Buffer.from(value, 'utf-8');
   return buff.toString('base64');
 }
 
-function decryptSensitive(encrypted: string): string {
+function decodeFromStorage(encoded: string): string {
   const key = process.env.CONFIG_ENCRYPTION_KEY;
-  if (!key || !encrypted) return encrypted;
-  
-  // base64 解码
-  const buff = Buffer.from(encrypted, 'base64');
+  if (!key || !encoded) return encoded;
+
+  const buff = Buffer.from(encoded, 'base64');
   return buff.toString('utf-8');
 }
 
@@ -926,16 +841,16 @@ app.get('/api/config', async (req: Request, res: Response) => {
     
     // 解密敏感信息
     if (configData.agents?.codex?.apiKey) {
-      configData.agents.codex.apiKey = decryptSensitive(configData.agents.codex.apiKey);
+      configData.agents.codex.apiKey = decodeFromStorage(configData.agents.codex.apiKey);
     }
     if (configData.agents?.claude?.apiKey) {
-      configData.agents.claude.apiKey = decryptSensitive(configData.agents.claude.apiKey);
+      configData.agents.claude.apiKey = decodeFromStorage(configData.agents.claude.apiKey);
     }
     if (configData.llm?.openai?.apiKey) {
-      configData.llm.openai.apiKey = decryptSensitive(configData.llm.openai.apiKey);
+      configData.llm.openai.apiKey = decodeFromStorage(configData.llm.openai.apiKey);
     }
     if (configData.llm?.hunyuan?.apiKey) {
-      configData.llm.hunyuan.apiKey = decryptSensitive(configData.llm.hunyuan.apiKey);
+      configData.llm.hunyuan.apiKey = decodeFromStorage(configData.llm.hunyuan.apiKey);
     }
     
     res.json(configData);
@@ -980,21 +895,21 @@ app.post('/api/config', async (req: Request, res: Response) => {
       agents: agents ? {
         codex: {
           ...agents.codex,
-          apiKey: agents.codex.apiKey ? encryptSensitive(agents.codex.apiKey) : '',
+          apiKey: agents.codex.apiKey ? encodeForStorage(agents.codex.apiKey) : '',
         },
         claude: {
           ...agents.claude,
-          apiKey: agents.claude.apiKey ? encryptSensitive(agents.claude.apiKey) : '',
+          apiKey: agents.claude.apiKey ? encodeForStorage(agents.claude.apiKey) : '',
         },
       } : existingConfig.agents,
       llm: llm ? {
         openai: {
           ...llm.openai,
-          apiKey: llm.openai.apiKey ? encryptSensitive(llm.openai.apiKey) : '',
+          apiKey: llm.openai.apiKey ? encodeForStorage(llm.openai.apiKey) : '',
         },
         hunyuan: {
           ...llm.hunyuan,
-          apiKey: llm.hunyuan.apiKey ? encryptSensitive(llm.hunyuan.apiKey) : '',
+          apiKey: llm.hunyuan.apiKey ? encodeForStorage(llm.hunyuan.apiKey) : '',
         },
       } : existingConfig.llm,
       defaultIntentLLM: defaultIntentLLM || existingConfig.defaultIntentLLM || 'hunyuan',
@@ -1100,7 +1015,6 @@ app.post('/api/projects', async (req: Request, res: Response) => {
       }
       
       // 初始化 Git 仓库
-      const { execSync } = require('child_process');
       try {
         execSync('git init', { cwd: projectPath, stdio: 'ignore' });
       } catch (gitError) {
@@ -1830,7 +1744,7 @@ async function executeWorkflowAsync(
   options: any
 ): Promise<string> {
   // 如果 options 中有 executionId，使用它；否则生成新的
-  const executionId = options.executionId || require('uuid').v4();
+  const executionId = options.executionId || uuidv4();
   
   const result = await executeWorkflow(workflowId, inputs, {
     ...options,

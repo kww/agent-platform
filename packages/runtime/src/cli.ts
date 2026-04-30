@@ -2,7 +2,7 @@
 
 /**
  * agent-runtime CLI
- * 
+ *
  * 参数格式支持：
  * 1. JSON: --input '{"project": "/path"}'
  * 2. key=value: --input project=/path --input requirement="实现登录"
@@ -11,19 +11,20 @@
  */
 
 // 静默 dotenvx 输出（在导入任何模块之前）
+// dotenvx 会在导入时输出配置信息到 stdout/stderr，干扰 CLI 输出
+// 通过临时过滤包含 '[dotenv@' 或 'tip:' 前缀的消息来抑制
 const originalLog = console.log;
 const originalError = console.error;
 if (process.env.QUIET_DOTENV !== 'false') {
-  console.log = (...args: any[]) => {
-    // 过滤 dotenvx 提示信息
+  const isDotenvNoise = (args: any[]) => {
     const msg = args.join(' ');
-    if (msg.includes('[dotenv@') || msg.includes('tip:')) return;
-    originalLog.apply(console, args);
+    return msg.includes('[dotenv@') || msg.includes('tip:');
+  };
+  console.log = (...args: any[]) => {
+    if (!isDotenvNoise(args)) originalLog.apply(console, args);
   };
   console.error = (...args: any[]) => {
-    const msg = args.join(' ');
-    if (msg.includes('[dotenv@') || msg.includes('tip:')) return;
-    originalError.apply(console, args);
+    if (!isDotenvNoise(args)) originalError.apply(console, args);
   };
 }
 

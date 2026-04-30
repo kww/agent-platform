@@ -148,7 +148,13 @@ export function mergeContexts(...contexts: (ProjectContext | null | undefined)[]
     result.bestPractices.push(...(ctx.bestPractices || []));
     result.commonDependencies.push(...(ctx.commonDependencies || []));
     
-    Object.assign(result, (({ language, framework, type, entryPoints, excludeDirs, testPatterns, bestPractices, commonDependencies, ...rest }) => rest)(ctx));
+    // 合并已知字段以外的自定义属性
+    const KNOWN_KEYS = new Set(['language', 'framework', 'type', 'entryPoints', 'excludeDirs', 'testPatterns', 'bestPractices', 'commonDependencies']);
+    for (const [key, value] of Object.entries(ctx)) {
+      if (!KNOWN_KEYS.has(key)) {
+        (result as any)[key] = value;
+      }
+    }
   }
   
   // 去重

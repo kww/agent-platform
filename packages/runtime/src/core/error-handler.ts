@@ -15,6 +15,7 @@ import {
   ErrorMatchConfig,
   ErrorAction,
   ErrorClassification,
+  StepErrorType,
   ExecutionContext,
   FallbackConfig,
   RetryConfig,
@@ -22,19 +23,7 @@ import {
 } from './types';
 import { classifySpawnError } from '../executors/spawn';
 
-/**
- * 步骤错误类型（用于步骤级错误处理）
- */
-export enum StepErrorType {
-  TIMEOUT = 'timeout',
-  AGENT_FAIL = 'agent_fail',
-  VALIDATION_FAIL = 'validation_fail',
-  TOOL_FAIL = 'tool_fail',
-  BUILTIN_FAIL = 'builtin_fail',
-  DEPENDENCY_FAIL = 'dependency_fail',
-  NETWORK_FAIL = 'network_fail',
-  UNKNOWN = 'unknown',
-}
+export { StepErrorType } from './types';
 
 /**
  * 错误匹配结果

@@ -11,7 +11,11 @@
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import type { ExecutionResult, StepResult } from '../core/types';
+
+const execAsync = promisify(exec);
 
 const STATE_DIR = '.agent-runtime';
 const STATE_FILE = 'state.json';
@@ -363,10 +367,6 @@ export async function canResume(
  */
 async function getGitCommitHash(workdir: string): Promise<string> {
   try {
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
-    
     const { stdout } = await execAsync('git rev-parse HEAD', { cwd: workdir });
     return stdout.trim();
   } catch {

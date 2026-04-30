@@ -8,20 +8,14 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../../../lib/common.sh"
+
 # 参数
 URL="${1:-}"
 HEADLESS="${2:-true}"
 BROWSER="${3:-chromium}"
 SESSION_NAME="${SESSION_NAME:-browser-session-$(date +%s)}"
-
-# 颜色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # 显示帮助
 show_help() {
@@ -75,10 +69,7 @@ log_info "URL: $URL"
 log_info "无头模式: $HEADLESS"
 
 # 调用 abs 打开 URL
-abs open "$URL" $ARGS 2>/dev/null
-
-# 检查是否成功
-if [[ $? -eq 0 ]]; then
+if abs open "$URL" $ARGS 2>/dev/null; then
   # 输出 JSON 结果
   cat << EOF
 {

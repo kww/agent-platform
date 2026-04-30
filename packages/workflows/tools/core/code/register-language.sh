@@ -342,24 +342,26 @@ init_config() {
 # 列出已注册语言
 list_languages() {
   init_config
-  
+
   echo "已注册语言:"
   echo ""
-  
-  # 预定义语言
+
+  # 预定义语言（合并为单次 jq 调用）
   echo "预定义语言 (${#PREDEFINED_LANGUAGES[@]} 种):"
+  local all_predefined="{"
   for lang in "${!PREDEFINED_LANGUAGES[@]}"; do
-    local config=$(echo "${PREDEFINED_LANGUAGES[$lang]}" | jq -r '.name + " - " + (.extensions | join(", "))')
-    echo "  - $config"
-  done | sort
-  
+    all_predefined+="\"$lang\": ${PREDEFINED_LANGUAGES[$lang]},"
+  done
+  all_predefined="${all_predefined%,}}"
+  echo "$all_predefined" | jq -r 'to_entries | sort_by(.key)[] | "  - \(.value.name) - \(.value.extensions | join(", "))"'
+
   # 用户注册的语言
   if [[ -s "$LANGUAGES_FILE" ]]; then
     local user_count=$(jq 'keys | length' "$LANGUAGES_FILE" 2>/dev/null || echo "0")
     if [[ "$user_count" -gt 0 ]]; then
       echo ""
       echo "用户注册语言 ($user_count 种):"
-      jq -r 'to_entries[] | "  - \(.key) - \(.value.extensions | join(\", \"))"' "$LANGUAGES_FILE" 2>/dev/null
+      jq -r 'to_entries[] | "  - \(.key) - \(.value.extensions | join(", "))"' "$LANGUAGES_FILE" 2>/dev/null
     fi
   fi
 }

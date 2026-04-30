@@ -10,6 +10,9 @@ import * as crypto from 'crypto';
 
 // JWT 配置（与 studio 一致）
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
+if (!process.env.JWT_SECRET) {
+  console.warn('[SECURITY] JWT_SECRET 未设置，使用默认开发密钥。生产环境请设置 JWT_SECRET 环境变量。');
+}
 
 // API Key 配置（独立使用 runtime 场景）
 const RUNTIME_API_KEY = process.env.RUNTIME_API_KEY;

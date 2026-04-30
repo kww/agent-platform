@@ -5,11 +5,12 @@
 
 import { parseTool } from '../core/parser';
 import { ExecutionContext, Tool } from '../core/types';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { CommandGate, createCommandGate } from '@dommaker/harness';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // 使用 harness CommandGate
 const commandGate = createCommandGate();
@@ -237,58 +238,46 @@ async function executeFileCopy(input: Record<string, any>, context: ExecutionCon
 async function executeGitClone(input: Record<string, any>, context: ExecutionContext): Promise<any> {
   const url = input.url;
   const dir = input.dir || '';
-  
-  const cmd = dir ? `git clone ${url} ${dir}` : `git clone ${url}`;
-  const { stdout, stderr } = await execAsync(cmd, { cwd: context.workdir });
-  
+  const args = dir ? ['clone', url, dir] : ['clone', url];
+  const { stdout, stderr } = await execFileAsync('git', args, { cwd: context.workdir });
   return { stdout, stderr, success: !stderr };
 }
 
 async function executeGitCommit(input: Record<string, any>, context: ExecutionContext): Promise<any> {
   const message = input.message;
-  
-  await execAsync('git add -A', { cwd: context.workdir });
-  const { stdout, stderr } = await execAsync(`git commit -m "${message}"`, { cwd: context.workdir });
-  
+  await execFileAsync('git', ['add', '-A'], { cwd: context.workdir });
+  const { stdout, stderr } = await execFileAsync('git', ['commit', '-m', message], { cwd: context.workdir });
   return { stdout, stderr, success: true };
 }
 
 async function executeGitPush(input: Record<string, any>, context: ExecutionContext): Promise<any> {
   const remote = input.remote || 'origin';
   const branch = input.branch || 'master';
-  
-  const { stdout, stderr } = await execAsync(`git push ${remote} ${branch}`, { cwd: context.workdir });
-  
+  const { stdout, stderr } = await execFileAsync('git', ['push', remote, branch], { cwd: context.workdir });
   return { stdout, stderr, success: true };
 }
 
 async function executeNpmInstall(input: Record<string, any>, context: ExecutionContext): Promise<any> {
-  const { stdout, stderr } = await execAsync('npm install', { cwd: context.workdir });
+  const { stdout, stderr } = await execFileAsync('npm', ['install'], { cwd: context.workdir });
   return { stdout, stderr, success: true };
 }
 
 async function executeNpmRun(input: Record<string, any>, context: ExecutionContext): Promise<any> {
   const script = input.script;
-  const { stdout, stderr } = await execAsync(`npm run ${script}`, { cwd: context.workdir });
+  const { stdout, stderr } = await execFileAsync('npm', ['run', script], { cwd: context.workdir });
   return { stdout, stderr, success: true };
 }
 
 async function executeGitBranch(input: Record<string, any>, context: ExecutionContext): Promise<any> {
   const branchName = input.branch_name;
   const fromBranch = input.from || 'main';
-  
-  // 创建新分支并切换到该分支
-  const cmd = `git checkout -b ${branchName} ${fromBranch}`;
-  const { stdout, stderr } = await execAsync(cmd, { cwd: context.workdir });
-  
+  const { stdout, stderr } = await execFileAsync('git', ['checkout', '-b', branchName, fromBranch], { cwd: context.workdir });
   return { stdout, stderr, success: !stderr, branch: branchName };
 }
 
 async function executeGitCheckout(input: Record<string, any>, context: ExecutionContext): Promise<any> {
   const branch = input.branch;
-  
-  const { stdout, stderr } = await execAsync(`git checkout ${branch}`, { cwd: context.workdir });
-  
+  const { stdout, stderr } = await execFileAsync('git', ['checkout', branch], { cwd: context.workdir });
   return { stdout, stderr, success: !stderr, branch };
 }
 

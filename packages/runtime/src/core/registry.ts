@@ -4,6 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'yaml';
 import { config } from '../utils/config';
 import { WorkflowMeta, ToolMeta, StepDefinition } from './types';
 
@@ -26,7 +27,7 @@ export async function listWorkflows(): Promise<WorkflowMeta[]> {
   
   return files.map(file => {
     const content = fs.readFileSync(path.join(workflowsDir, file), 'utf-8');
-    const data = require('yaml').parse(content);
+    const data = yaml.parse(content);
     const workflowName = data.name || file.replace('.yml', '');
     
     // 支持 steps、phases、sub_workflows 三种字段
@@ -89,7 +90,7 @@ export async function listTools(): Promise<ToolMeta[]> {
       for (const file of files) {
         const filePath = path.join(categoryPath, file);
         const content = fs.readFileSync(filePath, 'utf-8');
-        const data = require('yaml').parse(content);
+        const data = yaml.parse(content);
         const toolId = data.id || file.replace('.yml', '');
         
         tools.push({
@@ -127,43 +128,7 @@ export function getTool(name: string): ToolMeta | null {
  * 列出所有 Steps（从 workflows/tools/std 目录）
  */
 export async function listSteps(): Promise<StepDefinition[]> {
-  const stepsDir = config.skillsPath;
-  
-  if (!fs.existsSync(stepsDir)) {
-    return [];
-  }
-  
-  const steps: StepDefinition[] = [];
-  const categories = fs.readdirSync(stepsDir);
-  
-  for (const category of categories) {
-    const categoryPath = path.join(stepsDir, category);
-    if (fs.statSync(categoryPath).isDirectory()) {
-      const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
-      for (const file of files) {
-        const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = require('yaml').parse(content);
-        const stepName = data.name || file.replace('.yml', '');
-        
-        steps.push({
-          id: data.id || stepName.toLowerCase().replace(/\s+/g, '-'),
-          name: stepName,
-          description: data.description || '',
-          category: data.category || category,
-          type: 'skill',
-          agent: data.agent || 'codex',
-          temperature: data.temperature,
-          tools: data.tools || [],
-          prompt: data.prompt || '',
-          inputs: data.inputs,
-          outputs: data.outputs,
-          path: path.join(category, file)
-        });
-      }
-    }
-  }
-  
-  return steps;
+  return listStepsSync();
 }
 
 /**
@@ -185,7 +150,7 @@ export function listStepsSync(): StepDefinition[] {
       const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
       for (const file of files) {
         const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = require('yaml').parse(content);
+        const data = yaml.parse(content);
         const stepName = data.name || file.replace('.yml', '');
         
         steps.push({
@@ -239,7 +204,7 @@ export function getStep(name: string): StepDefinition | null {
     for (const filePath of possiblePaths) {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
-        return require('yaml').parse(content);
+        return yaml.parse(content);
       }
     }
     
@@ -249,7 +214,7 @@ export function getStep(name: string): StepDefinition | null {
         const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.yml'));
         for (const file of files) {
           const content = fs.readFileSync(path.join(dirPath, file), 'utf-8');
-          const data = require('yaml').parse(content);
+          const data = yaml.parse(content);
           if (data.name === fileName || data.id === fileName) {
             return data;
           }
@@ -280,7 +245,7 @@ export function getStep(name: string): StepDefinition | null {
       const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
       for (const file of files) {
         const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = require('yaml').parse(content);
+        const data = yaml.parse(content);
         if (data.name === name || data.id === name) {
           return data;
         }
@@ -300,10 +265,10 @@ function listWorkflowsSync(): WorkflowMeta[] {
     .filter(f => f.endsWith('.yml'))
     .map(file => {
       const content = fs.readFileSync(path.join(workflowsDir, file), 'utf-8');
-      const data = require('yaml').parse(content);
+      const data = yaml.parse(content);
       const workflowName = data.name || file.replace('.yml', '');
       
-      // 支持 steps 和 phases 两种字段
+      // 支持 steps、phases、sub_workflows 三种字段
       let stepIds: string[] = [];
       if (data.steps) {
         stepIds = data.steps.map((s: any) => typeof s === 'string' ? s : (s.id || s.pipeline || s.step || ''));
@@ -314,14 +279,17 @@ function listWorkflowsSync(): WorkflowMeta[] {
           }
           return phase.id || '';
         }).filter(Boolean);
+      } else if (data.sub_workflows) {
+        stepIds = data.sub_workflows.map((sw: any) => sw.id || sw.workflow || '');
       }
-      
+
       return {
         id: data.id || workflowName.toLowerCase().replace(/\s+/g, '-'),
         name: workflowName,
         description: data.description || '',
         category: data.category || 'general',
         type: 'workflow' as const,
+        stage: data.stage,
         stepIds,
         openclaw: data.openclaw,
         path: file
@@ -342,7 +310,7 @@ function listToolsSync(): ToolMeta[] {
       const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
       for (const file of files) {
         const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = require('yaml').parse(content);
+        const data = yaml.parse(content);
         const toolName = data.name || file.replace('.yml', '');
         
         tools.push({

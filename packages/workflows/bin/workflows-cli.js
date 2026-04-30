@@ -32,7 +32,7 @@ program
 function listYamlFiles(dir, prefix = '') {
   if (!fs.existsSync(dir)) return [];
   const files = [];
-  
+
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
@@ -40,6 +40,22 @@ function listYamlFiles(dir, prefix = '') {
       files.push(...listYamlFiles(fullPath, prefix + entry.name + '/'));
     } else if (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) {
       files.push(prefix + entry.name.replace(/\.ya?ml$/, ''));
+    }
+  }
+  return files;
+}
+
+function listYamlFilePaths(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const files = [];
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listYamlFilePaths(fullPath));
+    } else if (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) {
+      files.push(fullPath);
     }
   }
   return files;
@@ -79,23 +95,22 @@ program
     const errors = [];
     
     if (options.dir) {
-      // 验证目录
+      // 验证目录（递归）
       const dir = path.join(PKG_ROOT, options.dir);
       if (!fs.existsSync(dir)) {
         console.error(`目录不存在: ${options.dir}`);
         process.exit(1);
       }
-      
-      const files = fs.readdirSync(dir)
-        .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
-      
-      files.forEach(f => {
+
+      const filePaths = listYamlFilePaths(dir);
+      filePaths.forEach(f => {
+        const relative = path.relative(PKG_ROOT, f);
         try {
-          yaml.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
-          console.log(`✅ ${f}`);
+          yaml.parse(fs.readFileSync(f, 'utf-8'));
+          console.log(`✅ ${relative}`);
         } catch (e) {
-          console.log(`❌ ${f}: ${e.message}`);
-          errors.push(f);
+          console.log(`❌ ${relative}: ${e.message}`);
+          errors.push(relative);
         }
       });
     } else if (file) {
@@ -108,19 +123,18 @@ program
         process.exit(1);
       }
     } else {
-      // 验证所有
+      // 验证所有（递归）
       ['workflows', 'tools', 'contexts', 'templates'].forEach(dir => {
         const dirPath = path.join(PKG_ROOT, dir);
         if (!fs.existsSync(dirPath)) return;
-        
-        const files = fs.readdirSync(dirPath)
-          .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
-        
-        files.forEach(f => {
+
+        const filePaths = listYamlFilePaths(dirPath);
+        filePaths.forEach(f => {
+          const relative = path.relative(PKG_ROOT, f);
           try {
-            yaml.parse(fs.readFileSync(path.join(dirPath, f), 'utf-8'));
+            yaml.parse(fs.readFileSync(f, 'utf-8'));
           } catch (e) {
-            errors.push(`${dir}/${f}: ${e.message}`);
+            errors.push(`${relative}: ${e.message}`);
           }
         });
       });
@@ -140,19 +154,7 @@ program
 // ============================================
 
 function countYamlFiles(dir) {
-  if (!fs.existsSync(dir)) return 0;
-  let count = 0;
-  
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      count += countYamlFiles(fullPath);
-    } else if (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) {
-      count++;
-    }
-  }
-  return count;
+  return listYamlFiles(dir).length;
 }
 
 program

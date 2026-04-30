@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
 import {
   FailureRootCause,
@@ -157,7 +158,7 @@ export class RootCauseAnalyzer {
     const rulesPath = path.join(this.workDir, '.agent', 'root-cause-rules.yml');
     if (fs.existsSync(rulesPath)) {
       try {
-        const yaml = require('js-yaml');
+
         const content = fs.readFileSync(rulesPath, 'utf-8');
         const customRules = yaml.load(content) as RootCauseRule[];
         if (Array.isArray(customRules)) {
@@ -717,7 +718,7 @@ export class RootCauseAnalyzer {
     let items: any[] = [];
     if (fs.existsSync(backlogPath)) {
       try {
-        const yaml = require('js-yaml');
+
         const content = fs.readFileSync(backlogPath, 'utf-8');
         const data = yaml.load(content) as { items?: any[] };
         items = data.items || [];
@@ -743,7 +744,6 @@ export class RootCauseAnalyzer {
     items.push(backlogItem);
     
     // 保存
-    const yaml = require('js-yaml');
     const content = yaml.dump({ project: this.workDir, items }, { lineWidth: -1 });
     fs.writeFileSync(backlogPath, content, 'utf-8');
     

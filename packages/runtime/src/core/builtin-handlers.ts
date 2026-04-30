@@ -6,7 +6,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as crypto from 'crypto';
+import * as yaml from 'yaml';
 import { stanceHandlers } from './stance-handlers';
 
 export interface BuiltinHandler {
@@ -76,7 +77,7 @@ export const generateTasksHandler: BuiltinHandler = async (input, context) => {
   
   // 写入 tasks.yml
   const tasksYmlPath = path.join(workdir, 'tasks.yml');
-  fs.writeFileSync(tasksYmlPath, yaml.dump(tasksYml, { indent: 2, lineWidth: -1 }));
+  fs.writeFileSync(tasksYmlPath, yaml.stringify(tasksYml, { indent: 2 }));
   
   console.log(`✅ Generated tasks.yml with ${tasks.length} tasks`);
   
@@ -105,7 +106,7 @@ export const loadTasksHandler: BuiltinHandler = async (input, context) => {
   console.log('📋 Loading tasks.yml...');
   
   const content = fs.readFileSync(tasksYmlPath, 'utf-8');
-  const tasksYml = yaml.load(content) as any;
+  const tasksYml = yaml.parse(content) as any;
   
   // 构建依赖图
   const dependencyGraph = buildDependencyGraph(tasksYml.tasks || [], tasksYml.infrastructure || []);
@@ -1079,7 +1080,7 @@ export const generateIterationTasksHandler: BuiltinHandler = async (input, conte
   
   // 写入文件
   const tasksPath = path.join(agentDir, 'iteration-tasks.yml');
-  fs.writeFileSync(tasksPath, yaml.dump(tasksYml, { indent: 2, lineWidth: -1 }));
+  fs.writeFileSync(tasksPath, yaml.stringify(tasksYml, { indent: 2 }));
   
   console.log(`✅ Generated ${tasks.length} iteration tasks`);
   
@@ -1222,7 +1223,7 @@ export const validateTasksHandler: BuiltinHandler = async (input, context) => {
   let tasksYml: any;
   try {
     const content = fs.readFileSync(tasksYmlPath, 'utf-8');
-    tasksYml = yaml.load(content) as any;
+    tasksYml = yaml.parse(content) as any;
   } catch (e: any) {
     errors.push(`YAML 解析失败: ${e.message}`);
     return {
@@ -1639,16 +1640,15 @@ function buildTaskDependencyGraph(tasks: any[]): any {
  */
 export const backlogAddHandler: BuiltinHandler = async (input, context) => {
   const { project_path, item } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const backlogPath = path.join(project_path || context.workdir, '.agent', 'backlog.yml');
   
   // 加载现有 backlog
   let backlog: any = { project: { name: '' }, items: [], stats: { total: 0, by_type: {}, by_status: {}, by_priority: {} } };
   if (fs.existsSync(backlogPath)) {
     const content = fs.readFileSync(backlogPath, 'utf-8');
-    backlog = require('yaml').parse(content) || backlog;
+    backlog = yaml.parse(content) || backlog;
   }
   
   // 生成 ID
@@ -1689,7 +1689,7 @@ export const backlogAddHandler: BuiltinHandler = async (input, context) => {
   
   // 保存
   fs.mkdirSync(path.dirname(backlogPath), { recursive: true });
-  fs.writeFileSync(backlogPath, require('yaml').stringify(backlog), 'utf-8');
+  fs.writeFileSync(backlogPath, yaml.stringify(backlog), 'utf-8');
   
   return {
     success: true,
@@ -1703,9 +1703,8 @@ export const backlogAddHandler: BuiltinHandler = async (input, context) => {
  */
 export const backlogListHandler: BuiltinHandler = async (input, context) => {
   const { project_path, type, status, priority, limit } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const backlogPath = path.join(project_path || context.workdir, '.agent', 'backlog.yml');
   
   if (!fs.existsSync(backlogPath)) {
@@ -1713,7 +1712,7 @@ export const backlogListHandler: BuiltinHandler = async (input, context) => {
   }
   
   const content = fs.readFileSync(backlogPath, 'utf-8');
-  const backlog = require('yaml').parse(content) || { items: [] };
+  const backlog = yaml.parse(content) || { items: [] };
   
   let items = backlog.items || [];
   
@@ -1745,9 +1744,8 @@ export const backlogListHandler: BuiltinHandler = async (input, context) => {
  */
 export const backlogUpdateHandler: BuiltinHandler = async (input, context) => {
   const { project_path, item_id, status, priority, assignee } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const backlogPath = path.join(project_path || context.workdir, '.agent', 'backlog.yml');
   
   if (!fs.existsSync(backlogPath)) {
@@ -1755,7 +1753,7 @@ export const backlogUpdateHandler: BuiltinHandler = async (input, context) => {
   }
   
   const content = fs.readFileSync(backlogPath, 'utf-8');
-  const backlog = require('yaml').parse(content);
+  const backlog = yaml.parse(content);
   
   const item = backlog.items.find((i: any) => i.id === item_id);
   if (!item) {
@@ -1769,7 +1767,7 @@ export const backlogUpdateHandler: BuiltinHandler = async (input, context) => {
   
   backlog.stats = updateBacklogStats(backlog.items);
   
-  fs.writeFileSync(backlogPath, require('yaml').stringify(backlog), 'utf-8');
+  fs.writeFileSync(backlogPath, yaml.stringify(backlog), 'utf-8');
   
   return { success: true, item };
 };
@@ -1779,9 +1777,8 @@ export const backlogUpdateHandler: BuiltinHandler = async (input, context) => {
  */
 export const backlogResolveHandler: BuiltinHandler = async (input, context) => {
   const { project_path, item_id, resolution, workflow_execution_id } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const backlogPath = path.join(project_path || context.workdir, '.agent', 'backlog.yml');
   
   if (!fs.existsSync(backlogPath)) {
@@ -1789,7 +1786,7 @@ export const backlogResolveHandler: BuiltinHandler = async (input, context) => {
   }
   
   const content = fs.readFileSync(backlogPath, 'utf-8');
-  const backlog = require('yaml').parse(content);
+  const backlog = yaml.parse(content);
   
   const item = backlog.items.find((i: any) => i.id === item_id);
   if (!item) {
@@ -1804,7 +1801,7 @@ export const backlogResolveHandler: BuiltinHandler = async (input, context) => {
   
   backlog.stats = updateBacklogStats(backlog.items);
   
-  fs.writeFileSync(backlogPath, require('yaml').stringify(backlog), 'utf-8');
+  fs.writeFileSync(backlogPath, yaml.stringify(backlog), 'utf-8');
   
   return { success: true, item };
 };
@@ -1814,9 +1811,8 @@ export const backlogResolveHandler: BuiltinHandler = async (input, context) => {
  */
 export const backlogDecideHandler: BuiltinHandler = async (input, context) => {
   const { project_path } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const backlogPath = path.join(project_path || context.workdir, '.agent', 'backlog.yml');
   
   if (!fs.existsSync(backlogPath)) {
@@ -1824,7 +1820,7 @@ export const backlogDecideHandler: BuiltinHandler = async (input, context) => {
   }
   
   const content = fs.readFileSync(backlogPath, 'utf-8');
-  const backlog = require('yaml').parse(content);
+  const backlog = yaml.parse(content);
   
   // 获取 open 状态的项
   const openItems = (backlog.items || []).filter((i: any) => i.status === 'open');
@@ -1890,9 +1886,8 @@ function updateBacklogStats(items: any[]): any {
  */
 export const projectLoadStateHandler: BuiltinHandler = async (input, context) => {
   const { project_path } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const statePath = path.join(project_path || context.workdir, '.agent', 'project-state.yml');
   
   if (!fs.existsSync(statePath)) {
@@ -1904,7 +1899,7 @@ export const projectLoadStateHandler: BuiltinHandler = async (input, context) =>
   }
   
   const content = fs.readFileSync(statePath, 'utf-8');
-  const state = require('yaml').parse(content);
+  const state = yaml.parse(content);
   
   return {
     exists: true,
@@ -1918,9 +1913,8 @@ export const projectLoadStateHandler: BuiltinHandler = async (input, context) =>
  */
 export const projectSaveStateHandler: BuiltinHandler = async (input, context) => {
   const { project_path, state } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const statePath = path.join(project_path || context.workdir, '.agent', 'project-state.yml');
   
   // 加载现有状态
@@ -1933,7 +1927,7 @@ export const projectSaveStateHandler: BuiltinHandler = async (input, context) =>
   
   if (fs.existsSync(statePath)) {
     const content = fs.readFileSync(statePath, 'utf-8');
-    existingState = require('yaml').parse(content) || existingState;
+    existingState = yaml.parse(content) || existingState;
   }
   
   // 合并状态
@@ -1962,7 +1956,7 @@ export const projectSaveStateHandler: BuiltinHandler = async (input, context) =>
   
   // 保存
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, require('yaml').stringify(newState), 'utf-8');
+  fs.writeFileSync(statePath, yaml.stringify(newState), 'utf-8');
   
   return {
     success: true,
@@ -1976,9 +1970,8 @@ export const projectSaveStateHandler: BuiltinHandler = async (input, context) =>
  */
 export const decideNextWorkflowHandler: BuiltinHandler = async (input, context) => {
   const { project_path } = input;
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const statePath = path.join(project_path || context.workdir, '.agent', 'project-state.yml');
   const tasksPath = path.join(project_path || context.workdir, 'tasks.yml');
   const backlogPath = path.join(project_path || context.workdir, '.agent', 'backlog.yml');
@@ -1986,7 +1979,7 @@ export const decideNextWorkflowHandler: BuiltinHandler = async (input, context) 
   // 1. 检查是否有未完成的 tasks.yml
   if (fs.existsSync(tasksPath)) {
     const tasksContent = fs.readFileSync(tasksPath, 'utf-8');
-    const tasks = require('yaml').parse(tasksContent);
+    const tasks = yaml.parse(tasksContent);
     
     if (tasks.tasks && tasks.tasks.length > 0) {
       const completed = tasks.tasks.filter((t: any) => t.status === 'completed').length;
@@ -2006,7 +1999,7 @@ export const decideNextWorkflowHandler: BuiltinHandler = async (input, context) 
   // 2. 检查项目状态
   if (fs.existsSync(statePath)) {
     const stateContent = fs.readFileSync(statePath, 'utf-8');
-    const state = require('yaml').parse(stateContent);
+    const state = yaml.parse(stateContent);
     
     // 检查待处理项
     if (state.pending && state.pending.length > 0) {
@@ -2030,7 +2023,7 @@ export const decideNextWorkflowHandler: BuiltinHandler = async (input, context) 
   // 3. 检查 Backlog
   if (fs.existsSync(backlogPath)) {
     const backlogContent = fs.readFileSync(backlogPath, 'utf-8');
-    const backlog = require('yaml').parse(backlogContent);
+    const backlog = yaml.parse(backlogContent);
     
     const openItems = (backlog.items || []).filter((i: any) => i.status === 'open');
     if (openItems.length > 0) {
@@ -2077,10 +2070,8 @@ export const codeParseHandler: BuiltinHandler = async (input, context) => {
   const { file_path, language, project_path } = input;
   const workdir = project_path || context?.workdir || process.cwd();
   
-  const crypto = require('crypto');
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const absolutePath = path.join(workdir, file_path);
   
   if (!fs.existsSync(absolutePath)) {
@@ -2245,10 +2236,8 @@ export const codeFingerprintHandler: BuiltinHandler = async (input, context) => 
   const { file_path, project_path, compare_with } = input;
   const workdir = project_path || context?.workdir || process.cwd();
   
-  const crypto = require('crypto');
-  const fs = require('fs');
-  const path = require('path');
-  
+
+
   const absolutePath = path.join(workdir, file_path);
   const fingerprintPath = path.join(workdir, '.agent', 'fingerprints.json');
   
@@ -2664,7 +2653,7 @@ export const builtinHandlers: Record<string, BuiltinHandler> = {
     
     // 读取工作流定义
     const workflowContent = fs.readFileSync(globalWorkflowPath, 'utf-8');
-    const workflow = yaml.load(workflowContent) as Record<string, any>;
+    const workflow = yaml.parse(workflowContent) as Record<string, any>;
     
     console.log(`✅ 工作流加载成功: ${workflow.name || workflow_id}`);
     

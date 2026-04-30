@@ -112,16 +112,7 @@ function getCounterValue(metricName: string, labels: Record<string, string>): nu
   }
 }
 
-/**
- * 计算百分位数
- */
-function calculatePercentile(values: number[], percentile: number): number {
-  if (values.length === 0) return 0;
-  
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.ceil((percentile / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, index)];
-}
+import { calculatePercentile } from './utils';
 
 /**
  * 获取本地工作流指标
@@ -270,136 +261,51 @@ export function getStepSuccessRate(workflowId?: string): StepSuccessRate[] {
     durations: number[];
     name?: string;
   }>();
-  
+
+  // 确保 stepId 对应的统计条目存在
+  const ensureEntry = (stepId: string, name?: string) => {
+    if (!stepStats.has(stepId)) {
+      stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name });
+    }
+    return stepStats.get(stepId)!;
+  };
+
+  // 从 Prometheus 指标中收集 step_id -> value 的映射
+  const collectMetric = (metricName: string, callback: (stepId: string, value: number, name?: string) => void) => {
+    const metric = register.getSingleMetric(metricName);
+    if (!metric) return;
+    const hashMap = (metric as any).hashMap || {};
+    for (const key of Object.keys(hashMap)) {
+      const item = hashMap[key];
+      const labels = item?.labels || {};
+      if (workflowId && labels.workflow_id !== workflowId) continue;
+      const stepId = labels.step_id;
+      if (!stepId) continue;
+      callback(stepId, parseFloat(item?.value || 0), labels.step_name);
+    }
+  };
+
   try {
-    // 1. 收集 started 数据
-    const startedMetric = register.getSingleMetric('step_started_total');
-    if (startedMetric) {
-      const hashMap = (startedMetric as any).hashMap || {};
-      for (const key of Object.keys(hashMap)) {
-        const item = hashMap[key];
-        const labels = item?.labels || {};
-        
-        // 过滤 workflow_id
-        if (workflowId && labels.workflow_id !== workflowId) continue;
-        
-        const stepId = labels.step_id;
-        if (!stepId) continue;
-        
-        const value = parseFloat(item?.value || 0);
-        if (!stepStats.has(stepId)) {
-          stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name: labels.step_name });
-        }
-        stepStats.get(stepId)!.started += value;
-      }
-    }
-    
-    // 2. 收集 completed 数据
-    const completedMetric = register.getSingleMetric('step_completed_total');
-    if (completedMetric) {
-      const hashMap = (completedMetric as any).hashMap || {};
-      for (const key of Object.keys(hashMap)) {
-        const item = hashMap[key];
-        const labels = item?.labels || {};
-        
-        if (workflowId && labels.workflow_id !== workflowId) continue;
-        
-        const stepId = labels.step_id;
-        if (!stepId) continue;
-        
-        const value = parseFloat(item?.value || 0);
-        if (!stepStats.has(stepId)) {
-          stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name: labels.step_name });
-        }
-        stepStats.get(stepId)!.completed += value;
-      }
-    }
-    
-    // 3. 收集 failed 数据
-    const failedMetric = register.getSingleMetric('step_failed_total');
-    if (failedMetric) {
-      const hashMap = (failedMetric as any).hashMap || {};
-      for (const key of Object.keys(hashMap)) {
-        const item = hashMap[key];
-        const labels = item?.labels || {};
-        
-        if (workflowId && labels.workflow_id !== workflowId) continue;
-        
-        const stepId = labels.step_id;
-        if (!stepId) continue;
-        
-        const value = parseFloat(item?.value || 0);
-        if (!stepStats.has(stepId)) {
-          stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name: labels.step_name });
-        }
-        stepStats.get(stepId)!.failed += value;
-      }
-    }
-    
-    // 4. 收集 skipped 数据
-    const skippedMetric = register.getSingleMetric('step_skipped_total');
-    if (skippedMetric) {
-      const hashMap = (skippedMetric as any).hashMap || {};
-      for (const key of Object.keys(hashMap)) {
-        const item = hashMap[key];
-        const labels = item?.labels || {};
-        
-        if (workflowId && labels.workflow_id !== workflowId) continue;
-        
-        const stepId = labels.step_id;
-        if (!stepId) continue;
-        
-        const value = parseFloat(item?.value || 0);
-        if (!stepStats.has(stepId)) {
-          stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name: labels.step_name });
-        }
-        stepStats.get(stepId)!.skipped += value;
-      }
-    }
-    
-    // 5. 收集 cached 数据
-    const cachedMetric = register.getSingleMetric('step_cached_total');
-    if (cachedMetric) {
-      const hashMap = (cachedMetric as any).hashMap || {};
-      for (const key of Object.keys(hashMap)) {
-        const item = hashMap[key];
-        const labels = item?.labels || {};
-        
-        if (workflowId && labels.workflow_id !== workflowId) continue;
-        
-        const stepId = labels.step_id;
-        if (!stepId) continue;
-        
-        const value = parseFloat(item?.value || 0);
-        if (!stepStats.has(stepId)) {
-          stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name: labels.step_name });
-        }
-        stepStats.get(stepId)!.cached += value;
-      }
-    }
-    
-    // 6. 收集 duration 数据
-    const durationMetric = register.getSingleMetric('step_duration_seconds');
-    if (durationMetric) {
-      const hashMap = (durationMetric as any).hashMap || {};
-      for (const key of Object.keys(hashMap)) {
-        const item = hashMap[key];
-        const labels = item?.labels || {};
-        
-        if (workflowId && labels.workflow_id !== workflowId) continue;
-        
-        const stepId = labels.step_id;
-        if (!stepId) continue;
-        
-        const value = parseFloat(item?.value || 0);
-        if (!stepStats.has(stepId)) {
-          stepStats.set(stepId, { started: 0, completed: 0, failed: 0, skipped: 0, cached: 0, durations: [], name: labels.step_name });
-        }
-        stepStats.get(stepId)!.durations.push(value * 1000); // 转为毫秒
-      }
-    }
-    
-    // 7. 计算成功率
+    collectMetric('step_started_total', (stepId, value, name) => {
+      ensureEntry(stepId, name).started += value;
+    });
+    collectMetric('step_completed_total', (stepId, value, name) => {
+      ensureEntry(stepId, name).completed += value;
+    });
+    collectMetric('step_failed_total', (stepId, value, name) => {
+      ensureEntry(stepId, name).failed += value;
+    });
+    collectMetric('step_skipped_total', (stepId, value, name) => {
+      ensureEntry(stepId, name).skipped += value;
+    });
+    collectMetric('step_cached_total', (stepId, value, name) => {
+      ensureEntry(stepId, name).cached += value;
+    });
+    collectMetric('step_duration_seconds', (stepId, value, name) => {
+      ensureEntry(stepId, name).durations.push(value * 1000);
+    });
+
+    // 计算成功率
     for (const [stepId, stats] of stepStats) {
       const total = stats.started - stats.skipped; // 跳过的不计入总数
       const successRate = total > 0 ? stats.completed / total : 0;

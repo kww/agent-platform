@@ -4,6 +4,9 @@
 # 功能：统一管理所有能力，支持发现、查询、调用
 # ============================================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../lib/common.sh"
+
 # 项目根目录
 PROJECT_ROOT="$(dirname "$(dirname "$0")")"
 
@@ -29,106 +32,56 @@ REGISTRY_INDEX="$PROJECT_ROOT/registry/index.json"
 # 生成注册表索引
 generate_index() {
   echo "🔄 生成能力索引..."
-  
-  # 初始化 JSON
-  echo "{" > "$REGISTRY_INDEX"
-  echo "  \"tools\": [" >> "$REGISTRY_INDEX"
-  
-  # 遍历所有 tools（capabilities）
-  local first_tool=true
-  find "$TOOLS_DIR" -name "*.yml" | sort | while read -r file; do
+
+  require_command jq
+
+  # 收集 tools
+  local tools_json="[]"
+  while IFS= read -r file; do
     local category=$(basename "$(dirname "$file")")
     local name=$(basename "$file" .yml)
     local description=$(yaml_get "$file" "description")
-    local type="tool"
-    
-    if [ "$first_tool" = "false" ]; then
-      echo "," >> "$REGISTRY_INDEX"
-    fi
-    first_tool=false
-    
-    cat >> "$REGISTRY_INDEX" << EOF
-  {
-    "name": "$name",
-    "category": "$category",
-    "type": "$type",
-    "description": "$description",
-    "path": "$file"
-  }
-EOF
-  done
-  
-  echo " ]," >> "$REGISTRY_INDEX"
-  echo "  \"workflows\": [" >> "$REGISTRY_INDEX"
-  
-  # 遍历所有 workflows（pipelines）
-  local first_wf=true
-  find "$PIPELINES_DIR" -name "*.yml" | sort | while read -r file; do
+    tools_json=$(echo "$tools_json" | jq \
+      --arg name "$name" --arg cat "$category" --arg desc "$description" --arg path "$file" \
+      '. + [{"name": $name, "category": $cat, "type": "tool", "description": $desc, "path": $path}]')
+  done < <(find "$TOOLS_DIR" -name "*.yml" 2>/dev/null | sort)
+
+  # 收集 workflows
+  local workflows_json="[]"
+  while IFS= read -r file; do
     local name=$(basename "$file" .yml)
     local description=$(yaml_get "$file" "description")
-    local type="workflow"
-    
-    if [ "$first_wf" = "false" ]; then
-      echo "," >> "$REGISTRY_INDEX"
-    fi
-    first_wf=false
-    
-    cat >> "$REGISTRY_INDEX" << EOF
-  {
-    "name": "$name",
-    "category": "uncategorized",
-    "type": "$type",
-    "description": "$description",
-    "path": "$file"
-  }
-EOF
-  done
-  
-  echo " ]," >> "$REGISTRY_INDEX"
-  echo "  \"skills\": [" >> "$REGISTRY_INDEX"
-  
-  # 遍历所有 skills（每个 skill 一个目录，SKILL.md 带 frontmatter）
-  local first_skill=true
+    workflows_json=$(echo "$workflows_json" | jq \
+      --arg name "$name" --arg desc "$description" --arg path "$file" \
+      '. + [{"name": $name, "category": "uncategorized", "type": "workflow", "description": $desc, "path": $path}]')
+  done < <(find "$PIPELINES_DIR" -name "*.yml" 2>/dev/null | sort)
+
+  # 收集 skills
+  local skills_json="[]"
   for skill_dir in "$SKILLS_DIR"/*; do
-    if [ ! -d "$skill_dir" ]; then
-      continue
-    fi
+    if [ ! -d "$skill_dir" ]; then continue; fi
     local file="$skill_dir/SKILL.md"
-    if [ ! -f "$file" ]; then
-      continue
-    fi
-    # 从目录名获取 skill id
+    if [ ! -f "$file" ]; then continue; fi
     local name=$(basename "$skill_dir")
-    # 从 --- 之间的 frontmatter 提取 description
     local description=$(awk '/^---/{flag=!flag; next} flag{if (/^description:/) {print substr($0, 12); exit}}' "$file")
-    if [ -z "$description" ]; then
-      description="$name"
-    fi
-    local type="skill"
-    
-    if [ "$first_skill" = "false" ]; then
-      echo "," >> "$REGISTRY_INDEX"
-    fi
-    first_skill=false
-    
-    cat >> "$REGISTRY_INDEX" << EOF
-  {
-    "name": "$name",
-    "category": "uncategorized",
-    "type": "$type",
-    "description": "$description",
-    "path": "$file"
-  }
-EOF
+    if [ -z "$description" ]; then description="$name"; fi
+    skills_json=$(echo "$skills_json" | jq \
+      --arg name "$name" --arg desc "$description" --arg path "$file" \
+      '. + [{"name": $name, "category": "uncategorized", "type": "skill", "description": $desc, "path": $path}]')
   done
-  
-  echo " ]" >> "$REGISTRY_INDEX"
-  echo "}" >> "$REGISTRY_INDEX"
-  
+
+  # 组装最终 JSON
+  jq -n \
+    --argjson tools "$tools_json" \
+    --argjson workflows "$workflows_json" \
+    --argjson skills "$skills_json" \
+    '{tools: $tools, workflows: $workflows, skills: $skills}' \
+    > "$REGISTRY_INDEX"
+
   echo "✅ 索引生成完成: $REGISTRY_INDEX"
-  local count_tools=$(cat "$REGISTRY_INDEX" | jq '.tools | length')
-  local count_wfs=$(cat "$REGISTRY_INDEX" | jq '.workflows | length')
-  local count_skills=$(cat "$REGISTRY_INDEX" | jq '.skills | length')
+  local count_tools=$(jq '.tools | length' "$REGISTRY_INDEX")
+  local count_wfs=$(jq '.workflows | length' "$REGISTRY_INDEX")
+  local count_skills=$(jq '.skills | length' "$REGISTRY_INDEX")
   local total=$((count_tools + count_wfs + count_skills))
   echo "📊 总计: $total 个能力"
   echo "   - tools: $count_tools"

@@ -8,19 +8,13 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../../../lib/common.sh"
+
 # 参数
 SESSION_ID="${1:-}"
 SAVE_SCREENSHOTS="${2:-true}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/browser-screenshots}"
-
-# 颜色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # 显示帮助
 show_help() {
@@ -78,10 +72,7 @@ if [[ "$SAVE_SCREENSHOTS" == "true" ]]; then
 fi
 
 # 关闭浏览器
-abs close --session-name "$SESSION_ID" 2>/dev/null
-
-# 检查是否成功
-if [[ $? -eq 0 ]]; then
+if abs close --session-name "$SESSION_ID" 2>/dev/null; then
   log_info "浏览器会话已关闭"
   
   cat << EOF

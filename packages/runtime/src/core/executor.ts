@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
 import { parseWorkflow } from './parser';
 import { EventEmitter, Events, EventHandler } from './events';
@@ -138,13 +139,13 @@ const stepCache = createStepCache({
   enableGitHash: true,
 });
 
-// 定期清理过期缓存（每分钟）
+// 定期清理过期缓存（每分钟，unref 防止阻止进程退出）
 setInterval(() => {
   const cleared = stepCache.clearExpired();
   if (cleared > 0) {
     console.log(`[Cache] 清理 ${cleared} 个过期缓存`);
   }
-}, 60000);
+}, 60000).unref();
 
 /**
  * 生成步骤缓存 key
@@ -1249,9 +1250,6 @@ async function verifyIronLaw(law: import('./types').IronLaw, context: ExecutionC
  * 2. 如果有源代码但没有测试文件，返回 false
  */
 async function checkTestsExist(context: ExecutionContext): Promise<boolean> {
-  const fs = require('fs');
-  const path = require('path');
-  
   // 使用项目路径而非 workdir（workdir 可能是 outputs 目录）
   const projectPath = context.inputs.project_path || context.workdir;
   
@@ -1337,7 +1335,6 @@ async function checkTestsPassed(context: ExecutionContext): Promise<boolean> {
   const projectPath = context.inputs.project_path || context.workdir;
   
   // 如果没有测试步骤，尝试运行测试
-  const { execSync } = require('child_process');
   try {
     execSync('npm test -- --passWithNoTests', {
       cwd: projectPath,
@@ -1787,8 +1784,7 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
           // 🆕 Script 类型：执行 shell 脚本
           console.log(`📜 Executing script: ${step.step}`);
           
-          const { execSync } = require('child_process');
-          const script = stepDef.execute.script;
+                  const script = stepDef.execute.script;
           
           // 替换变量（${inputs.xxx} 格式）
           let processedScript = script;
@@ -1857,8 +1853,8 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
           if (fileOutput && typeof output === 'string') {
             // 写入文件
             const projectPath = context.inputs.project_path || context.workdir;
-            const filePath = require('path').join(projectPath, step.output);
-            require('fs').writeFileSync(filePath, output, 'utf-8');
+            const filePath = path.join(projectPath, step.output);
+            fs.writeFileSync(filePath, output, 'utf-8');
             console.log(`📝 Written output to file: ${filePath}`);
           }
         }
@@ -2792,8 +2788,7 @@ async function executeRollback(
     console.log(`  📌 ${step.message || step.command}`);
     
     try {
-      const { execSync } = require('child_process');
-      const projectPath = context.inputs.project_path || context.workdir;
+          const projectPath = context.inputs.project_path || context.workdir;
       execSync(step.command, {
         cwd: projectPath,
         stdio: 'inherit'

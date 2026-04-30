@@ -8,6 +8,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../../../../lib/common.sh"
+
 # 参数
 CHANNEL="${1:-discord}"
 MESSAGE="${2:-}"
@@ -15,17 +18,6 @@ TITLE="${3:-}"
 
 # 通知队列目录
 NOTIFICATION_DIR="${NOTIFICATION_DIR:-/tmp/agent-notifications}"
-
-# 颜色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # 显示帮助
 show_help() {
@@ -62,6 +54,22 @@ if [[ "$1" == "-h" || "$1" == "--help" || -z "$MESSAGE" ]]; then
   show_help
 fi
 
+# 检查依赖
+require_command jq
+
+# 验证渠道
+if [[ "$CHANNEL" != "discord" && "$CHANNEL" != "queue" ]]; then
+  log_error "不支持的通知渠道: $CHANNEL"
+  cat << EOF
+{
+  "success": false,
+  "error": "Unsupported channel: $CHANNEL",
+  "supported_channels": ["discord", "queue"]
+}
+EOF
+  exit 1
+fi
+
 # 生成消息 ID
 MESSAGE_ID="notify-$(date +%s)-$$"
 
@@ -72,62 +80,22 @@ else
   FULL_MESSAGE="$MESSAGE"
 fi
 
-# 根据渠道发送
-case "$CHANNEL" in
-  discord)
-    # 方案 1: 尝试使用 sessions_send（如果有 OpenClaw 环境）
-    # 方案 2: 降级到队列
-    
-    # 检查是否有 sessions_send 工具
-    # 这里我们写入队列，由 OpenClaw 的 heartbeat 检查并发送
-    mkdir -p "$NOTIFICATION_DIR"
-    
-    NOTIFICATION_FILE="$NOTIFICATION_DIR/${MESSAGE_ID}.json"
-    
-    cat > "$NOTIFICATION_FILE" << EOF
-{
-  "id": "$MESSAGE_ID",
-  "channel": "discord",
-  "title": "$TITLE",
-  "content": $(echo "$MESSAGE" | jq -Rs .),
-  "timestamp": "$(date -Iseconds)",
-  "status": "pending"
-}
-EOF
-    
-    log_info "通知已写入队列: $NOTIFICATION_FILE"
-    
-    cat << EOF
-{
-  "success": true,
-  "message_id": "$MESSAGE_ID",
-  "channel": "discord",
-  "status": "queued",
-  "file": "$NOTIFICATION_FILE"
-}
-EOF
-    ;;
-  
-  queue)
-    # 直接写入队列
-    mkdir -p "$NOTIFICATION_DIR"
-    
-    NOTIFICATION_FILE="$NOTIFICATION_DIR/${MESSAGE_ID}.json"
-    
-    cat > "$NOTIFICATION_FILE" << EOF
-{
-  "id": "$MESSAGE_ID",
-  "channel": "$CHANNEL",
-  "title": "$TITLE",
-  "content": $(echo "$MESSAGE" | jq -Rs .),
-  "timestamp": "$(date -Iseconds)",
-  "status": "pending"
-}
-EOF
-    
-    log_info "通知已写入队列: $NOTIFICATION_FILE"
-    
-    cat << EOF
+# 写入通知队列（discord 和 queue 共用相同逻辑）
+mkdir -p "$NOTIFICATION_DIR"
+NOTIFICATION_FILE="$NOTIFICATION_DIR/${MESSAGE_ID}.json"
+
+jq -n \
+  --arg id "$MESSAGE_ID" \
+  --arg channel "$CHANNEL" \
+  --arg title "$TITLE" \
+  --arg content "$MESSAGE" \
+  --arg ts "$(date -Iseconds)" \
+  '{id: $id, channel: $channel, title: $title, content: $content, timestamp: $ts, status: "pending"}' \
+  > "$NOTIFICATION_FILE"
+
+log_info "通知已写入队列: $NOTIFICATION_FILE"
+
+cat << EOF
 {
   "success": true,
   "message_id": "$MESSAGE_ID",
@@ -136,17 +104,3 @@ EOF
   "file": "$NOTIFICATION_FILE"
 }
 EOF
-    ;;
-  
-  *)
-    log_error "不支持的通知渠道: $CHANNEL"
-    cat << EOF
-{
-  "success": false,
-  "error": "Unsupported channel: $CHANNEL",
-  "supported_channels": ["discord", "queue"]
-}
-EOF
-    exit 1
-    ;;
-esac

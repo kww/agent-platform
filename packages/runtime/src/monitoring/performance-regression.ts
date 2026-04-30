@@ -8,6 +8,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { getLocalWorkflowMetrics, isLocalDataAvailable } from './local-data-source';
+import { calculatePercentile } from './utils';
+
+export { calculatePercentile } from './utils';
 
 // 类型定义
 export interface PerformanceMetrics {
@@ -134,17 +137,6 @@ async function queryPrometheusRange(query: string, start: number, end: number, s
     console.warn('Prometheus range query failed:', error);
     return [];
   }
-}
-
-/**
- * 计算百分位数
- */
-export function calculatePercentile(values: number[], percentile: number): number {
-  if (values.length === 0) return 0;
-  
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.ceil((percentile / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, index)];
 }
 
 /**
