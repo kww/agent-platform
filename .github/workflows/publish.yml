@@ -11,15 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-      
-      - name: Install pnpm
-        run: npm install -g pnpm
-      
+
       - name: Install dependencies
         run: pnpm install
       
@@ -27,7 +28,7 @@ jobs:
         run: pnpm --filter @dommaker/runtime build
       
       - name: Publish runtime
-        run: cd packages/runtime && npm publish --access public
+        run: cd packages/runtime && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -36,13 +37,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-      
+
+      - name: Install dependencies
+        run: pnpm install
+
       - name: Publish workflows
-        run: cd packages/workflows && npm publish --access public
+        run: cd packages/workflows && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

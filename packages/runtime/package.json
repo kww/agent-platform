@@ -9,9 +9,11 @@
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "dev": "ts-node src/cli.ts",
     "test": "jest",
-    "lint": "eslint src/**/*.ts",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist coverage *.tsbuildinfo",
     "golden:list": "ts-node scripts/golden-master-cli.ts list",
     "golden:record": "ts-node scripts/golden-master-cli.ts record",
     "golden:verify": "ts-node scripts/golden-master-cli.ts verify",
@@ -48,7 +50,6 @@
     "@dommaker/workflows": "^0.0.1",
     "chalk": "^4.1.2",
     "js-yaml": "^4.1.0",
-    "yaml": "^2.8.3",
     "commander": "^12.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -67,6 +68,7 @@
     "puppeteer": "^22.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^29.0.0",
@@ -78,10 +80,10 @@
     "ts-jest": "^29.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0",
-    "yaml": "^2.8.3"
+    "typescript-eslint": "^8.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "repository": {
     "type": "git",

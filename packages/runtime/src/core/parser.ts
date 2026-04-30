@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'yaml';
+import * as yaml from 'js-yaml';
 import { config } from '../utils/config';
 import { Workflow, Tool, Registry } from './types';
 
@@ -19,7 +19,7 @@ export function parseWorkflow(workflowId: string): Workflow {
   }
   
   const content = fs.readFileSync(filePath, 'utf-8');
-  const data = yaml.parse(content);
+  const data = yaml.load(content);
   
   // 验证必需字段
   if (!data.id) data.id = workflowId;
@@ -115,7 +115,7 @@ export function parseTool(name: string): Tool {
     for (const filePath of possiblePaths) {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
-        return yaml.parse(content) as Tool;
+        return yaml.load(content) as Tool;
       }
     }
     
@@ -125,7 +125,7 @@ export function parseTool(name: string): Tool {
         const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.yml'));
         for (const file of files) {
           const fileContent = fs.readFileSync(path.join(dirPath, file), 'utf-8');
-          const tool = yaml.parse(fileContent) as Tool;
+          const tool = yaml.load(fileContent) as Tool;
           if (tool.name === name || tool.name === name.replace('/', '-') || (tool as any).id === name) {
             return tool;
           }
@@ -147,7 +147,7 @@ export function parseTool(name: string): Tool {
     for (const file of files) {
       const filePath = path.join(toolsDir, file);
       const content = fs.readFileSync(filePath, 'utf-8');
-      const tool = yaml.parse(content) as Tool;
+      const tool = yaml.load(content) as Tool;
       
       // 匹配 name 字段
       if (tool.name === name) {

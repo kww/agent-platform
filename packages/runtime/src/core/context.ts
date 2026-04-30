@@ -9,7 +9,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'yaml';
+import * as yaml from 'js-yaml';
 
 export interface ProjectContext {
   language?: string;
@@ -35,7 +35,7 @@ export async function loadContextFile(contextPath: string): Promise<ProjectConte
   
   try {
     const content = await fs.readFile(fullPath, 'utf-8');
-    return yaml.parse(content);
+    return yaml.load(content);
   } catch {
     return null;
   }

@@ -10,6 +10,14 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
+  coverageThreshold: {
+    global: {
+      branches: 60,
+      functions: 60,
+      lines: 60,
+      statements: 60,
+    },
+  },
   verbose: true,
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
 };

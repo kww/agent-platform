@@ -28,7 +28,7 @@ export function createLLMClient(config: LLMClientConfig = {}): LLMClient {
   const timeout = config.timeout || 60000;
 
   if (!apiKey) {
-    console.warn('[LLM Client] No API key configured. Set LLM_API_KEY environment variable or pass apiKey in config.');
+    throw new Error('[LLM Client] API key 未配置。请设置 LLM_API_KEY 环境变量或在 config 中传入 apiKey。');
   }
 
   return {

@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'yaml';
+import * as yaml from 'js-yaml';
 import { config } from '../utils/config';
 import { WorkflowMeta, ToolMeta, StepDefinition } from './types';
 
@@ -27,7 +27,7 @@ export async function listWorkflows(): Promise<WorkflowMeta[]> {
   
   return files.map(file => {
     const content = fs.readFileSync(path.join(workflowsDir, file), 'utf-8');
-    const data = yaml.parse(content);
+    const data = yaml.load(content);
     const workflowName = data.name || file.replace('.yml', '');
     
     // 支持 steps、phases、sub_workflows 三种字段
@@ -90,7 +90,7 @@ export async function listTools(): Promise<ToolMeta[]> {
       for (const file of files) {
         const filePath = path.join(categoryPath, file);
         const content = fs.readFileSync(filePath, 'utf-8');
-        const data = yaml.parse(content);
+        const data = yaml.load(content);
         const toolId = data.id || file.replace('.yml', '');
         
         tools.push({
@@ -150,7 +150,7 @@ export function listStepsSync(): StepDefinition[] {
       const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
       for (const file of files) {
         const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = yaml.parse(content);
+        const data = yaml.load(content);
         const stepName = data.name || file.replace('.yml', '');
         
         steps.push({
@@ -204,7 +204,7 @@ export function getStep(name: string): StepDefinition | null {
     for (const filePath of possiblePaths) {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
-        return yaml.parse(content);
+        return yaml.load(content);
       }
     }
     
@@ -214,7 +214,7 @@ export function getStep(name: string): StepDefinition | null {
         const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.yml'));
         for (const file of files) {
           const content = fs.readFileSync(path.join(dirPath, file), 'utf-8');
-          const data = yaml.parse(content);
+          const data = yaml.load(content);
           if (data.name === fileName || data.id === fileName) {
             return data;
           }
@@ -245,7 +245,7 @@ export function getStep(name: string): StepDefinition | null {
       const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
       for (const file of files) {
         const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = yaml.parse(content);
+        const data = yaml.load(content);
         if (data.name === name || data.id === name) {
           return data;
         }
@@ -265,7 +265,7 @@ function listWorkflowsSync(): WorkflowMeta[] {
     .filter(f => f.endsWith('.yml'))
     .map(file => {
       const content = fs.readFileSync(path.join(workflowsDir, file), 'utf-8');
-      const data = yaml.parse(content);
+      const data = yaml.load(content);
       const workflowName = data.name || file.replace('.yml', '');
       
       // 支持 steps、phases、sub_workflows 三种字段
@@ -310,7 +310,7 @@ function listToolsSync(): ToolMeta[] {
       const files = fs.readdirSync(categoryPath).filter(f => f.endsWith('.yml'));
       for (const file of files) {
         const content = fs.readFileSync(path.join(categoryPath, file), 'utf-8');
-        const data = yaml.parse(content);
+        const data = yaml.load(content);
         const toolName = data.name || file.replace('.yml', '');
         
         tools.push({

@@ -31,9 +31,9 @@ test-steps:
 # YAML 语法检查
 lint:
 	@echo "🔍 Checking YAML syntax..."
-	@find workflows -name "*.yml" -exec yq eval '.' {} \; > /dev/null
-	@find tools -name "*.yml" -exec yq eval '.' {} \; > /dev/null
-	@find steps -name "*.yml" -exec yq eval '.' {} \; > /dev/null
+	@find workflows -name "*.yml" -exec yq eval '.' {} + > /dev/null
+	@find tools -name "*.yml" -exec yq eval '.' {} + > /dev/null
+	@find steps -name "*.yml" -exec yq eval '.' {} + > /dev/null
 	@echo "✅ All YAML files are valid"
 
 # Schema 验证
