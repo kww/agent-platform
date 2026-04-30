@@ -345,6 +345,6 @@ Skill（能力单元层）
 
 ## 相关文档
 
-- [Tools 能力层](../tools/README.md)
-- [Workflow 编排](../workflows/README.md)
-- [Skill 开发指南](../docs/skill-development-guide.md)
+- Tools 能力层
+- Workflow 编排
+- Skill 开发指南

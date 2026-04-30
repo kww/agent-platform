@@ -217,5 +217,5 @@ Harness Trace 检测异常
 ## 相关文档
 
 - [Architecture Overview](./architecture.md)
-- [Harness Documentation](../../node_modules/@dommaker/harness/README.md)
-- [Error Handling](./faq.md#error-handling)
+- Harness Documentation
+- Error Handling

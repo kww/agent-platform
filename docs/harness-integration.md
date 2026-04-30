@@ -119,7 +119,7 @@ executeWorkflow()
 
 ## Iron Laws 引用
 
-> 完整定义见 [harness iron-laws.md](../../harness/docs/iron-laws.md)
+> 完整定义见 harness iron-laws.md
 
 | ID | 规则 |
 |---|------|

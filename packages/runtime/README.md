@@ -1,6 +1,6 @@
 # @dommaker/runtime
 
-> AI Agent 工作流执行引擎 - npm 包 + CLI
+> AI Agent 工作流执行引擎 - npm 包 + CLI + HTTP API
 
 ## 安装
 
@@ -14,6 +14,8 @@ npx @dommaker/runtime --version
 
 ## CLI 使用
 
+### 基础命令
+
 ```bash
 # 查看版本
 agent-runtime --version
@@ -21,26 +23,52 @@ agent-runtime --version
 # 列出能力
 agent-runtime list workflows     # 列出工作流
 agent-runtime list tools         # 列出工具
-agent-runtime list steps         # 列出步骤
+agent-runtime list steps         # 列出步骤（简写）
 
-# 执行工作流（多种参数格式）
+# 独立命令
+agent-runtime list-steps [category]  # 按类别列出原子步骤
+```
+
+### 执行工作流
+
+```bash
+# 基本执行
 agent-runtime run wf-dev --project ~/myapp
+
+# 多种参数格式
 agent-runtime run wf-dev --input project_path=~/myapp
 agent-runtime run wf-dev --input '{"project_path": "~/myapp"}'
 agent-runtime run wf-dev -p ~/myapp -r "实现登录"
 
+# Backlog 模式（按 Feature ID）
+agent-runtime run wf-dev --project ~/myapp --feature FE-001
+
+# 断点续传（从中断处恢复）
+agent-runtime run wf-dev --project ~/myapp --resume
+
+# 强制重新执行（忽略缓存和状态）
+agent-runtime run wf-dev --project ~/myapp --force
+
+# 调试模式（只解析参数，不执行）
+agent-runtime run wf-dev --project ~/myapp --dry-run
+```
+
+### 执行控制
+
+```bash
 # 执行单个步骤
 agent-runtime step analyze-codebase -p ~/myapp
 
 # 查询执行状态
 agent-runtime status <executionId>
 
-# 验证工作流
+# 验证工作流定义
 agent-runtime validate wf-dev
+```
 
-# 调试参数（不执行）
-agent-runtime run wf-dev --project ~/myapp --dry-run
+### 服务启动
 
+```bash
 # 启动 HTTP API Server
 agent-runtime server --port 3001
 ```
@@ -159,17 +187,91 @@ const response = await client.chatWithHistory([
 agent-runtime server --port 3001
 ```
 
-| 端点 | 说明 |
-|------|------|
-| `GET /health` | 健康检查 |
-| `GET /api/workflows` | 列出工作流 |
-| `GET /api/tools` | 列出工具 |
-| `POST /api/execute` | 执行工作流 |
-| `GET /api/executions/:id` | 获取执行状态 |
-| `POST /api/executions/:id/stop` | 停止执行 |
-| `DELETE /api/executions/:id` | 删除执行（需认证）|
-| `DELETE /api/projects/:id` | 删除项目（需认证）|
-| `DELETE /api/v1/mcp/servers/:id` | 删除 MCP Server（需认证）|
+### 基础端点
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `GET /health` | GET | 健康检查 |
+| `GET /metrics` | GET | Prometheus 指标 |
+
+### 工作流管理
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `GET /api/workflows` | GET | 列出工作流 |
+| `GET /api/workflows/:id` | GET | 获取工作流详情 |
+| `GET /api/tools` | GET | 列出工具 |
+| `GET /api/skills` | GET | 列出原子步骤 |
+
+### 执行管理
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `POST /api/execute` | POST | 执行工作流 |
+| `GET /api/executions` | GET | 列出历史执行（分页） |
+| `GET /api/executions/:id` | GET | 获取执行详情 |
+| `GET /api/status/:id` | GET | 查询执行状态 |
+| `POST /api/executions/:id/stop` | POST | 停止执行 |
+| `POST /api/executions/:id/pause` | POST | 暂停执行 |
+| `POST /api/executions/:id/resume` | POST | 恢复执行 |
+| `POST /api/executions/:id/retry` | POST | 重试执行 |
+| `POST /api/executions/:id/steps/:stepId/retry` | POST | 重试单步骤 |
+| `DELETE /api/executions/:id` | DELETE | 删除执行（需认证）|
+
+### 项目管理
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `DELETE /api/projects/:id` | DELETE | 删除项目（需认证）|
+
+### MCP Server 管理
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `DELETE /api/v1/mcp/servers/:id` | DELETE | 删除 MCP Server（需认证）|
+
+### 配置管理
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `GET /api/config` | GET | 获取配置 |
+| `POST /api/config` | POST | 更新配置 |
+
+### 统计分析
+
+| 端点 | 方法 | 说明 |
+|------|:----:|------|
+| `GET /api/steps/stats` | GET | 步骤成功率统计 |
+
+### 请求示例
+
+```bash
+# 执行工作流
+curl -X POST http://localhost:3001/api/execute \
+  -H "Content-Type: application/json" \
+  -d '{"workflow": "wf-dev", "inputs": {"project_path": "~/myapp"}}'
+
+# 列出历史执行（分页）
+curl "http://localhost:3001/api/executions?page=1&limit=20"
+
+# 暂停执行
+curl -X POST http://localhost:3001/api/executions/exec-123/pause
+
+# 恢复执行
+curl -X POST http://localhost:3001/api/executions/exec-123/resume
+
+# 重试执行
+curl -X POST http://localhost:3001/api/executions/exec-123/retry
+
+# 重试单个步骤
+curl -X POST http://localhost:3001/api/executions/exec-123/steps/analyze-codebase/retry
+
+# 获取步骤统计
+curl http://localhost:3001/api/steps/stats
+
+# Prometheus 指标
+curl http://localhost:3001/metrics
+```
 
 ## 🔒 认证说明（SEC-004）
 
@@ -201,12 +303,15 @@ curl "http://localhost:3001/api/executions/123?apiKey=$RUNTIME_API_KEY"
 - ✅ Phase 划分执行
 - ✅ Session 上下文传递
 - ✅ 变量解析 `${steps.xxx.output}`
-- ✅ 断点续传
+- ✅ 断点续传（`--resume`）
 - ✅ 实时进度追踪
 - ✅ 多 Agent 支持（Codex, Claude Code）
 - ✅ Token 使用追踪
 - ✅ 智能通知（Discord/Webhook/企业微信/Telegram）
 - ✅ **删除 API 权限保护（SEC-004）**
+- ✅ **暂停/恢复执行**
+- ✅ **单步骤重试**
+- ✅ **步骤成功率统计**
 
 ## License
 
