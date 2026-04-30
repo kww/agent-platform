@@ -27,6 +27,13 @@ import { config } from './utils/config';
 import { getMetrics } from './monitoring';
 import { requireNotGuest } from './middleware/auth';
 
+/**
+ * 读取并解析 JSON 文件
+ */
+function readJsonFile(filePath: string): any {
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+}
+
 const app = express();
 
 // 中间件
@@ -48,7 +55,7 @@ function findExecutionDir(executionId: string): { dir: string; statePath: string
     const statePath = path.join(outputsDir, dir, '.agent-runtime', 'state.json');
     if (fs.existsSync(statePath)) {
       try {
-        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+        const state = readJsonFile(statePath);
         if (state.executionId === executionId) {
           return { dir, statePath, state };
         }
@@ -169,7 +176,7 @@ app.post('/api/executions/:id/retry', async (req: Request, res: Response) => {
     for (const dir of dirs) {
       const metaPath = path.join(outputsDir, dir, '.meta.json');
       if (fs.existsSync(metaPath)) {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const meta = readJsonFile(metaPath);
         const idStr = Array.isArray(executionId) ? executionId[0] : executionId;
         if (meta.executionId === executionId || dir.includes(idStr.substring(0, 8))) {
           originalMeta = meta;
@@ -532,11 +539,11 @@ app.get('/api/executions/:id', async (req: Request, res: Response) => {
     let meta: any = {};
     
     if (fs.existsSync(statePath)) {
-      state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+      state = readJsonFile(statePath);
     }
     
     if (fs.existsSync(metaPath)) {
-      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      meta = readJsonFile(metaPath);
     }
     
     // 获取输出文件列表
@@ -621,11 +628,11 @@ app.get('/api/executions', async (req: Request, res: Response) => {
       let meta: any = null;
       
       if (fs.existsSync(statePath)) {
-        state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+        state = readJsonFile(statePath);
       }
       
       if (fs.existsSync(metaPath)) {
-        meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        meta = readJsonFile(metaPath);
       }
       
       return {
@@ -837,7 +844,7 @@ app.get('/api/config', async (req: Request, res: Response) => {
     }
     
     // 读取加密配置
-    const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const configData = readJsonFile(configPath);
     
     // 解密敏感信息
     if (configData.agents?.codex?.apiKey) {
@@ -884,7 +891,7 @@ app.post('/api/config', async (req: Request, res: Response) => {
     // 读取现有配置
     let existingConfig: any = {};
     if (fs.existsSync(configPath)) {
-      existingConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      existingConfig = readJsonFile(configPath);
     }
     
     // 加密敏感信息
@@ -968,7 +975,7 @@ app.get('/api/projects', async (req: Request, res: Response) => {
       return res.json([]);
     }
     
-    const projectsData = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'));
+    const projectsData = readJsonFile(projectsPath);
     res.json(projectsData.projects || []);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
@@ -994,7 +1001,7 @@ app.post('/api/projects', async (req: Request, res: Response) => {
     // 读取现有项目
     let projectsData: any = { projects: [], version: '1.0.0' };
     if (fs.existsSync(projectsPath)) {
-      projectsData = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'));
+      projectsData = readJsonFile(projectsPath);
     }
     
     // 检查项目是否已存在
@@ -1057,7 +1064,7 @@ app.delete('/api/projects/:id', requireNotGuest(), async (req: Request, res: Res
       return res.status(404).json({ error: 'Projects registry not found' });
     }
     
-    const projectsData = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'));
+    const projectsData = readJsonFile(projectsPath);
     projectsData.projects = projectsData.projects.filter((p: any) => p.id !== id);
     
     fs.writeFileSync(projectsPath, JSON.stringify(projectsData, null, 2));

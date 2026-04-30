@@ -107,6 +107,14 @@ import {
   DEFAULT_THRESHOLDS,
 } from './scheduler';
 
+// ========== 超时常量 (ms) ==========
+const CACHE_CLEANUP_INTERVAL_MS = 60_000;        // 缓存清理间隔 1 分钟
+const DEFAULT_TEST_TIMEOUT_MS = 60_000;           // 测试执行超时 1 分钟
+const DEFAULT_SCRIPT_EXEC_TIMEOUT_MS = 60_000;    // 脚本执行超时 1 分钟
+const PARALLEL_EXECUTION_TIMEOUT_MS = 300_000;    // 并行执行超时 5 分钟
+const DEFAULT_ROLE_TASK_TIMEOUT_MS = 300_000;     // 角色任务超时 5 分钟
+const DEFAULT_MAX_RETRY_DELAY_MS = 60_000;        // 最大重试延迟 1 分钟
+
 // ========== 🆕 AR-009 P1: 惰性加载输出 ==========
 
 /**
@@ -145,7 +153,7 @@ setInterval(() => {
   if (cleared > 0) {
     console.log(`[Cache] 清理 ${cleared} 个过期缓存`);
   }
-}, 60000).unref();
+}, CACHE_CLEANUP_INTERVAL_MS).unref();
 
 /**
  * 生成步骤缓存 key
@@ -266,7 +274,7 @@ export async function executeWorkflow(
   const workflow = parseWorkflow(workflowId);
   
   // 步骤超时默认值
-  const stepTimeout = options.stepTimeout || 300000; // 5分钟
+  const stepTimeout = options.stepTimeout || PARALLEL_EXECUTION_TIMEOUT_MS;
   
   // 检查是否可以恢复
   let previousState: WorkflowState | null = null;
@@ -676,7 +684,7 @@ async function executeSteps(steps: Step[], context: ExecutionContext): Promise<v
       const executor = new ParallelExecutor({
         maxConcurrent: getMaxConcurrent(step.max_parallel, context.workflow?.concurrency),
         failStrategy: step.failStrategy ?? 'continue',
-        timeout: step.timeout ?? 300000,
+        timeout: step.timeout ?? PARALLEL_EXECUTION_TIMEOUT_MS,
         onProgress: (info) => {
           context.eventEmitter.emit('parallel.progress', {
             stepId: info.stepId,
@@ -1339,7 +1347,7 @@ async function checkTestsPassed(context: ExecutionContext): Promise<boolean> {
     execSync('npm test -- --passWithNoTests', {
       cwd: projectPath,
       stdio: 'pipe',
-      timeout: 60000
+      timeout: DEFAULT_TEST_TIMEOUT_MS
     });
     return true;
   } catch {
@@ -1674,8 +1682,8 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
           const progressParser = new ProgressParser({
             heartbeat: {
               interval: 10000,      // 10秒检测一次
-              timeout: 300000,      // 5分钟无输出超时
-              warningThreshold: 60000, // 1分钟无输出警告
+              timeout: PARALLEL_EXECUTION_TIMEOUT_MS,
+              warningThreshold: DEFAULT_TEST_TIMEOUT_MS,
             },
           });
           
@@ -1802,7 +1810,7 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
           const result = execSync(processedScript, {
             cwd: effectiveWorkDir,
             encoding: 'utf-8',
-            timeout: 60000,
+            timeout: DEFAULT_SCRIPT_EXEC_TIMEOUT_MS,
             shell: '/bin/bash',
           });
           
@@ -2380,7 +2388,7 @@ async function executeStep(step: Step, context: ExecutionContext): Promise<void>
 function calculateRetryDelay(attempt: number, config: import('./types').RetryConfig): number {
   const backoff = config.backoff || 'exponential';
   const initialDelay = config.initialDelay || 1000;
-  const maxDelay = config.maxDelay || 60000;
+  const maxDelay = config.maxDelay || DEFAULT_MAX_RETRY_DELAY_MS;
   
   if (backoff === 'fixed') {
     return Math.min(initialDelay, maxDelay);
@@ -3370,7 +3378,7 @@ export async function executeRole(
         roleInput,
         {
           workdir: options.workdir || config.workdir,
-          timeout: roleTask.timeout || options.timeout || 300000,
+          timeout: roleTask.timeout || options.timeout || DEFAULT_ROLE_TASK_TIMEOUT_MS,
           onEvent: options.onEvent,
         }
       );

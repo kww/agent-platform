@@ -10,6 +10,7 @@
  */
 
 import { register } from './metrics-listener';
+import { logger } from '../utils/logger';
 
 // 类型定义
 export interface LocalWorkflowMetrics {
@@ -205,10 +206,10 @@ export function getAllWorkflowMetrics(): Map<string, LocalWorkflowMetrics> {
     for (const workflowId of workflowIds) {
       result.set(workflowId, getLocalWorkflowMetrics(workflowId));
     }
-  } catch {
-    // 忽略错误
+  } catch (err) {
+    logger.warn(`[DataSource] 获取工作流指标失败: ${err}`);
   }
-  
+
   return result;
 }
 
@@ -328,8 +329,8 @@ export function getStepSuccessRate(workflowId?: string): StepSuccessRate[] {
     
     // 按成功率排序（成功率低的排前面，便于发现问题）
     result.sort((a, b) => a.successRate - b.successRate);
-  } catch {
-    // 忽略错误
+  } catch (err) {
+    logger.warn(`[DataSource] 获取步骤成功率失败: ${err}`);
   }
   
   return result;
@@ -355,8 +356,8 @@ export function getMetricsSummary(): Record<string, number> {
       
       summary[name] = total;
     }
-  } catch {
-    // 忽略错误
+  } catch (err) {
+    logger.warn(`[DataSource] 获取指标摘要失败: ${err}`);
   }
   
   return summary;

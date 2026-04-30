@@ -37,6 +37,11 @@ import { logger } from '../utils/logger.js';
 
 const execAsync = promisify(exec);
 
+// ========== 超时常量 (ms) ==========
+const DEFAULT_TEST_TIMEOUT_MS = 60_000;       // 单元测试超时 1 分钟
+const E2E_TEST_TIMEOUT_MS = 120_000;          // 端到端测试超时 2 分钟
+const TDD_TEST_TIMEOUT_MS = 30_000;           // TDD 检查超时 30 秒
+
 /**
  * 执行器注册器
  */
@@ -73,7 +78,7 @@ export class EnforcementExecutorRegistry {
       async execute(context: EnforcementContext): Promise<EnforcementResult> {
         const projectPath = context.projectPath || process.cwd();
         const command = context.params?.command || 'npm test';
-        const timeout = context.params?.timeout || 60000;
+        const timeout = context.params?.timeout || DEFAULT_TEST_TIMEOUT_MS;
 
         try {
           const start = Date.now();
@@ -111,7 +116,7 @@ export class EnforcementExecutorRegistry {
         try {
           const { stdout } = await execAsync('npm run test:e2e', {
             cwd: projectPath,
-            timeout: 120000,
+            timeout: E2E_TEST_TIMEOUT_MS,
           });
 
           return {
@@ -243,7 +248,7 @@ export class EnforcementExecutorRegistry {
         try {
           const { stdout } = await execAsync('npm test -- --passWithNoTests', {
             cwd: projectPath,
-            timeout: 30000,
+            timeout: TDD_TEST_TIMEOUT_MS,
           });
 
           // TDD 需要先有失败测试
@@ -278,7 +283,7 @@ export class EnforcementExecutorRegistry {
         try {
           const { stdout } = await execAsync('npm test', {
             cwd: projectPath,
-            timeout: 60000,
+            timeout: DEFAULT_TEST_TIMEOUT_MS,
           });
 
           return {
@@ -332,7 +337,7 @@ export class EnforcementExecutorRegistry {
         try {
           const { stdout } = await execAsync('npm run test:coverage', {
             cwd: projectPath,
-            timeout: 60000,
+            timeout: DEFAULT_TEST_TIMEOUT_MS,
           });
 
           // 解析覆盖率

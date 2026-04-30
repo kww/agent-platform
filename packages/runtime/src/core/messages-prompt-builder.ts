@@ -36,6 +36,7 @@ export interface BuildPromptConfig {
  */
 const DEFAULT_RECENT_COUNT = 2;
 const DEFAULT_MAX_HISTORY_TOKENS = 50000;
+const MAX_MESSAGE_CONTENT_LENGTH = 5000;  // 消息内容截断长度
 
 /**
  * Token 估算系数（简单估算）
@@ -193,7 +194,7 @@ export function buildPromptFromMessages(messages: Message[]): string {
     
     const content = msg.compressed 
       ? msg.content  // 已压缩
-      : truncateContent(msg.content, 5000);  // 截断到 5000 字符
+      : truncateContent(msg.content, MAX_MESSAGE_CONTENT_LENGTH);
     
     lines.push(`### ${roleLabel}`);
     lines.push(content);

@@ -96,6 +96,10 @@ export interface AuditChainConfig {
   chainId?: string;     // 链 ID（默认 'default'）
 }
 
+// ==================== 常量 ====================
+
+const MAX_AUDIT_ENTRIES = 10_000;  // 审计链最大保留条目数
+
 // ==================== AuditChain 类 ====================
 
 export class AuditChain {
@@ -373,8 +377,8 @@ export class AuditChain {
     const entries = await this.getAllEntries();
     entries.push(entry);
     
-    // 只保留最近 10000 条
-    const trimmed = entries.slice(-10000);
+    // 只保留最近 N 条
+    const trimmed = entries.slice(-MAX_AUDIT_ENTRIES);
     await this.contextSharer.set(this.getChainKey(), trimmed);
   }
 
