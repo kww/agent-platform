@@ -1,6 +1,6 @@
 # agent-platform 功能清单
 
-> 最后更新: 2026-04-27 by titi
+> 最后更新: 2026-04-30 by titi
 > 铁律：代码变更必须同步更新此文件
 
 ## 约束集成 (packages/runtime/src/core/)
@@ -38,9 +38,9 @@
 
 | 包 | 版本 | 说明 |
 |------|:----:|------|
-| @dommaker/runtime | 0.0.4 | 工作流执行引擎 |
-| @dommaker/workflows | 0.0.5 | 工作流定义 |
-| @dommaker/harness | ^0.7.7 | 约束框架（依赖）|
+| @dommaker/runtime | 0.0.5 | 工作流执行引擎 |
+| @dommaker/workflows | 0.0.6 | 工作流定义（150+ workflows + 113 tools）|
+| @dommaker/harness | ^0.8.3 | 约束框架（依赖）|
 
 ---
 
