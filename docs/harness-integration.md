@@ -140,11 +140,3 @@ executeWorkflow()
   }
 }
 ```
-
----
-
-## 相关文档
-
-- [harness README](../../harness/README.md) — CLI + API 完整文档
-- [harness Iron Laws](../../harness/docs/iron-laws.md) — 铁律定义
-- [integration-plan.md](integration-plan.md) — 落地方案
