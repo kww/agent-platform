@@ -1,85 +1,37 @@
 # Agent Platform
 
-> 约束驱动的 Agent 执行平台 — harness + runtime + workflows
+> **DEPRECATED** — 此项目已废弃，功能已迁移至以下项目：
+>
+> - **约束框架** → [@dommaker/harness](https://github.com/dommaker/harness) (独立包，v0.9.0+)
+> - **工作流执行** → [@dommaker/runtime](https://github.com/dommaker/runtime) (独立包)
+> - **工作流定义** → [@dommaker/workflows](https://github.com/dommaker/workflows) (独立包)
+> - **业务逻辑** → [Agent Studio](https://github.com/dommaker/agent-studio) (studio-* 包)
+>
+> 此仓库仅保留历史参考，不再维护。
 
 ---
 
-## 🚀 快速开始
+## 原始说明
 
-```bash
-# 列出能力
-npx @dommaker/workflows list workflows
-npx @dommaker/workflows list tools
+约束驱动的 Agent 执行平台 — harness + runtime + workflows
 
-# 执行工作流
-npx @dommaker/runtime run wf-dev --project ~/myapp
+### 原有 Packages
 
-# 约束检查
-harness check && harness passes-gate
-```
-
----
-
-## 🎯 核心能力
-
-| 能力 | 状态 | 说明 | 详情 |
-|------|:----:|------|------|
-| Workflow 执行 | ✅ | 150+ 工作流定义 | [CAPABILITIES.md](CAPABILITIES.md) |
-| 工具库 | ✅ | 113 个原子工具 | [CAPABILITIES.md](CAPABILITIES.md) |
-| 约束集成 | ✅ | harness Iron Laws + Gates | [docs/harness-integration.md](docs/harness-integration.md) |
-| Agent 共享 | ✅ | messages 传递 + TaskOutput | [orchestration/](packages/runtime/src/orchestration) |
-
-→ **[完整功能清单](CAPABILITIES.md)**
-
----
-
-## 📦 Packages
-
-| 包 | 版本 | 用途 |
+| 包 | 状态 | 说明 |
 |------|:----:|------|
-| @dommaker/runtime | 0.0.5 | 工作流执行引擎 |
-| @dommaker/workflows | 0.0.6 | 工作流定义（150+ workflows + 113 tools）|
-| @dommaker/harness | 0.8.3 | 约束框架（独立仓库）|
+| @dommaker/runtime | 已迁移 | 工作流执行引擎 → 独立仓库 |
+| @dommaker/workflows | 已迁移 | 工作流定义 (150+ workflows + 113 tools) → 独立仓库 |
+| @dommaker/harness | 已迁移 | 约束框架 → 独立仓库 |
+
+### 迁移时间线
+
+- 2026-04-28: harness 独立为 @dommaker/harness
+- 2026-04-29: runtime/workflows 独立为 @dommaker/runtime, @dommaker/workflows
+- 2026-05-01: 业务逻辑迁移到 agent-studio 的 studio-* 包
+- 2026-05-02: 标记为 DEPRECATED
 
 ---
 
-## 📁 目录结构
-
-```
-packages/
-├── runtime/          # 执行引擎
-│   └── src/
-│       ├── core/       # executor, parser, registry
-│       └── orchestration/  # task-queue, context-sharer
-│
-└── workflows/        # 工作流定义
-    ├── workflows/      # 150+ 个工作流
-    ├── tools/          # 113 个工具
-    └── contexts/       # 5 个上下文模板
-```
-
----
-
-## 🔧 开发命令
-
-```bash
-pnpm install                    # 安装依赖
-pnpm --filter @dommaker/runtime build   # 构建 runtime
-pnpm --filter @dommaker/workflows build # 构建 workflows
-pnpm test                       # 运行测试
-```
-
----
-
-## 🔗 详细文档
-
-- → [CAPABILITIES.md](CAPABILITIES.md) — 功能清单
-- → [docs/harness-integration.md](docs/harness-integration.md) — harness 集成
-- → [packages/workflows/docs/FAQ.md](packages/workflows/docs/FAQ.md) — 工作流 FAQ
-- → [packages/workflows/docs/workflow-development-guide.md](packages/workflows/docs/workflow-development-guide.md) — 开发指南
-
----
-
-## 📝 License
+## License
 
 MIT © dommaker

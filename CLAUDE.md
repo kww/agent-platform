@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+> **DEPRECATED** — This repository is no longer maintained. Functionality has been split into:
+> - `@dommaker/harness` — constraint framework (standalone package)
+> - `@dommaker/runtime` — workflow execution engine (standalone package)
+> - `@dommaker/workflows` — workflow definitions (standalone package)
+> - `agent-studio` — business logic via `studio-*` packages
+>
+> Do not add new features or dependencies to this repo.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview

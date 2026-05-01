@@ -2,7 +2,8 @@
   "name": "agent-platform",
   "private": true,
   "version": "0.0.1",
-  "description": "Agent Platform Monorepo",
+  "deprecated": "This package is deprecated. Use @dommaker/harness, @dommaker/runtime, @dommaker/workflows, and agent-studio instead.",
+  "description": "[DEPRECATED] Agent Platform Monorepo — use agent-studio instead",
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
