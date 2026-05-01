@@ -8,7 +8,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as yaml from 'js-yaml';
-import { stanceHandlers } from './stance-handlers';
 
 export interface BuiltinHandler {
   (input: Record<string, any>, context?: any): Promise<any>;
@@ -2674,8 +2673,6 @@ export const builtinHandlers: Record<string, BuiltinHandler> = {
   'code_parse': codeParseHandler,
   'code_fingerprint': codeFingerprintHandler,
   'code_register_language': codeRegisterLanguageHandler,
-  // Stance handlers (立场隔离机制)
-  ...stanceHandlers,
   // Evolution handlers (自我进化机制)
   'evolution/report-gap': async (input: any, context: any) => {
     const { handleReportGap } = await import('../executors/evolution');
@@ -2684,35 +2681,6 @@ export const builtinHandlers: Record<string, BuiltinHandler> = {
   'evolution/prioritize': async (input: any, context: any) => {
     const { handlePrioritize } = await import('../executors/evolution');
     return handlePrioritize(input);
-  },
-  // Governance handlers (治理机制)
-  'governance/create-voting-session': async (input: any, context: any) => {
-    const { handleCreateVotingSession } = await import('../executors/governance');
-    return handleCreateVotingSession(input, context?.workdir || process.cwd());
-  },
-  'governance/cast-vote': async (input: any, context: any) => {
-    const { handleCastVote } = await import('../executors/governance');
-    return handleCastVote(input, context?.workdir || process.cwd());
-  },
-  'governance/vote-tally': async (input: any, context: any) => {
-    const { handleVoteTally } = await import('../executors/governance');
-    return handleVoteTally(input, context?.workdir || process.cwd());
-  },
-  'governance/audit-task': async (input: any, context: any) => {
-    const { handleAuditTask } = await import('../executors/governance');
-    return handleAuditTask(input, context?.workdir || process.cwd());
-  },
-  'governance/impeach': async (input: any, context: any) => {
-    const { handleImpeach } = await import('../executors/governance');
-    return handleImpeach(input, context?.workdir || process.cwd());
-  },
-  'governance/track-effect': async (input: any, context: any) => {
-    const { handleTrackEffect } = await import('../executors/governance');
-    return handleTrackEffect(input, context?.workdir || process.cwd());
-  },
-  'governance/rollback': async (input: any, context: any) => {
-    const { handleRollback } = await import('../executors/governance');
-    return handleRollback(input, context?.workdir || process.cwd());
   },
   // Validation handlers (验证工具)
   'validation/check-reuse': async (input: any, context: any) => {

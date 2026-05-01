@@ -357,20 +357,10 @@ export type {
   TaskStepStatus,
   ConstraintRule,
   ConstraintCondition,
-  Personality,
-  PersonalityTemplate,
-  PersonalityBehaviorInfluence,
   TaskListJson,
   // Workflow 配置用的简化版 IronLaw（有 enforce_at 属性）
   IronLaw,
 } from './core/types';
-
-// Personality 导出
-export {
-  PersonalitySystem,
-  createPersonalitySystem,
-  PERSONALITY_TEMPLATES,
-} from './core/personality';
 
 // ============================================
 // 🆕 自我进化机制导出
@@ -492,127 +482,3 @@ export type {
   CommandBlacklistRule,
   CommandGateConfig,
 } from '@dommaker/harness';
-
-// ============================================
-// 🆕 角色系统导出
-// ============================================
-
-// 类型导出
-export type {
-  Role,
-  RoleLevel,
-  RoleStatus,
-  RoleCapability,
-  RoleEconomy,
-  RolePerformance,
-  RolePersonality,
-  RoleMetadata,
-  LevelRequirement,
-  PerformanceStatus,
-  PromotionRequest,
-  DemotionRecord,
-  AssessmentRecord,
-  AssessmentType,
-  ResignationRequest,
-  TransferRequest,
-  ResponsibilityChain,
-  ResponsibilityNode,
-} from './types/role';
-
-// 常量导出
-export {
-  LEVEL_REQUIREMENTS,
-  ASSESSMENT_STANDARDS,
-  RESPONSIBILITY_WEIGHTS,
-  calculateTransferFee,
-} from './types/role';
-
-// 角色模板导出
-export {
-  ROLE_TEMPLATES,
-  INITIAL_CAPABILITIES,
-  ROLE_STANCE_MAP,
-  getRoleTemplate,
-  getAllRoleTemplates,
-  getInitialCapabilities,
-  getRoleStance,
-  REVIEWER_ROLE,
-  STRATEGIST_ROLE,
-  TECH_LEAD_ROLE,
-  DEVELOPER_ROLE,
-  TESTER_ROLE,
-  ARCHITECT_ROLE,
-  SECURITY_EXPERT_ROLE,
-  PERFORMANCE_EXPERT_ROLE,
-  AUDITOR_ROLE,
-} from './core/roles';
-
-// 角色管理器导出
-export {
-  RoleManager,
-  createRoleManager,
-  CreateRoleInput,
-  UpdateRoleInput,
-  RoleFilter,
-} from './core/role-manager';
-
-// 级别管理器导出
-export {
-  LevelManager,
-  createLevelManager,
-  PromotionCheckResult,
-  DemotionCheckResult,
-  AssessmentResult,
-} from './core/level-manager';
-
-// ============================================
-// 🆕 编排层导出
-// ============================================
-
-// 核心类导出
-export {
-  Orchestrator,
-  MeetingSubscriber,
-  ContextSharer,
-  RoleScheduler,
-  RolePriority,
-} from './orchestration';
-
-// 会议核心（C-修正架构）
-export {
-  MeetingCore,
-  createMeetingCore,
-  InMemoryMeetingStore,
-} from './orchestration';
-
-// 便捷函数导出
-export {
-  createOrchestrator,
-  createMeetingSubscriber,
-  createContextSharer,
-  createRoleScheduler,
-} from './orchestration';
-
-// 类型导出
-export type {
-  OrchestrationConfig,
-  OrchestrationResult,
-  OrchestrationStatus,
-  OrchestrationEvent,
-  RoleResult,
-  RoleTask,
-  RoleTaskResult,
-  SharedContext,
-  MeetingEvent,
-  // 会议相关类型
-  Meeting,
-  MeetingParticipant,
-  MeetingMessage,
-  MeetingDecision,
-  MeetingSummary,
-  MeetingStatus,
-  MeetingStore,
-  CreateMeetingInput,
-  SendMessageInput,
-  MeetingCoreConfig,
-} from './orchestration';

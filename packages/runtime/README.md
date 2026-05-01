@@ -79,7 +79,7 @@ agent-runtime server --port 3001
 # 工作流路径（默认使用 npm 包）
 AGENT_WORKFLOWS_PATH=/path/to/workflows
 
-# LLM 配置（用于 DiscussionDriver、MeetingCore 等模块）
+# LLM 配置
 LLM_API_KEY=sk-xxx             # LLM API Key（必填）
 LLM_BASE_URL=https://api.deepseek.com/v1  # API 端点（可选，默认 OpenAI）
 LLM_MODEL=deepseek-chat        # 模型名称（可选，默认 gpt-3.5-turbo）
